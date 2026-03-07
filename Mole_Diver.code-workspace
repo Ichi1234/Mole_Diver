@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "Mole_Diver",
+			"path": "."
+		},
+		{
+			"name": ".github",
+			"path": "../.github"
+		}
+	],
+	"settings": {}
+}
