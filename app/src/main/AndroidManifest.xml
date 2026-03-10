@@ -6,7 +6,7 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
-        android:theme="@style/Theme.MoleDiver">>
+        android:theme="@style/Theme.MoleDiver">
 
         <activity android:name=".SplashActivity" android:exported="true">
             <intent-filter>
