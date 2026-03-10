@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0D1A0D">
+
+    <!-- Centered content -->
+    <LinearLayout
+        android:id="@+id/splashContent"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:alpha="0">
+
+        <!-- Mole icon placeholder — swap with your actual mole ImageView later -->
+        <ImageView
+            android:id="@+id/splashIcon"
+            android:layout_width="120dp"
+            android:layout_height="120dp"
+            android:src="@mipmap/ic_launcher"
+            android:scaleType="fitCenter"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Game title -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="MOLE DIVER"
+            android:textSize="44sp"
+            android:textColor="#FFFFFF"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:letterSpacing="0.12"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Tagline -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="DIG DEEP · OUTRUN THE GAS"
+            android:textSize="11sp"
+            android:textColor="#4CAF50"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.08" />
+
+    </LinearLayout>
+
+    <!-- Loading dots at the bottom -->
+    <TextView
+        android:id="@+id/tvLoading"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_centerHorizontal="true"
+        android:layout_marginBottom="48dp"
+        android:text="● ● ●"
+        android:textSize="12sp"
+        android:textColor="#2B6B2B"
+        android:fontFamily="monospace"
+        android:alpha="0" />
+
+</RelativeLayout>
