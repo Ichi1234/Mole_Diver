@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#0D1A0D">
+
+    <!-- Top bar -->
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="#0a140a"
+        android:paddingStart="8dp"
+        android:paddingEnd="16dp">
+
+        <Button
+            android:id="@+id/btnBack"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="BACK"
+            android:textColor="#AAAAAA"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:backgroundTint="@android:color/transparent"
+            android:layout_centerVertical="true"
+            android:layout_alignParentStart="true" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_centerInParent="true"
+            android:gravity="center">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ACHIEVEMENT"
+                android:textSize="22sp"
+                android:textColor="#4CAF50"
+                android:fontFamily="monospace"
+                android:textStyle="bold"
+                android:letterSpacing="0.1" />
+
+            <TextView
+                android:id="@+id/tvCompletion"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0% COMPLETION"
+                android:textSize="10sp"
+                android:textColor="#666666"
+                android:fontFamily="monospace" />
+
+        </LinearLayout>
+
+    </RelativeLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#1E3A1E" />
+
+    <!-- Achievements list -->
+    <ListView
+        android:id="@+id/listAchievements"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:divider="#1E3A1E"
+        android:dividerHeight="1dp"
+        android:padding="8dp" />
+
+</LinearLayout>
