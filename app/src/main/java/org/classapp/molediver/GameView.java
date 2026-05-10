@@ -11,9 +11,15 @@ import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
+import java.util.ArrayList;
+import java.util.Iterator;
+
 public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Callback {
 
     private static final String TAG = "GameView";
+
+    // ─── Context (held as application context to avoid Activity leak) ─────────
+    private final Context context;
 
     // ─── Game loop ───────────────────────────────────────────────────────────
     private Thread           thread;
@@ -22,11 +28,13 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     // ─── Screen ──────────────────────────────────────────────────────────────
     private int screenW, screenH;
 
-    // ─── Mole ────────────────────────────────────────────────────────────────
-    private static final float MOVE_SPEED  = 5f;
-    private static final float TURN_SPEED  = 2f;
+    // ─── Mole (constants) ────────────────────────────────────────────────────
     private static final float MOLE_RADIUS = 28f;
     private static final float MAX_ANGLE   = 75f;
+
+    // ─── Mole (upgrade-derived, recalculated each run in resetGame) ──────────
+    private float moveSpeed;
+    private float turnSpeed;
 
     private float moleWorldX;
     private float moleWorldY;
@@ -44,10 +52,21 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     private static final float GAS_SPEED = 1.2f;
     private float gasWorldY;
 
-    // ─── Oxygen ──────────────────────────────────────────────────────────────
-    private static final float MAX_OXYGEN = 100f;
-    private static final float OXY_DRAIN  = 0.03f;
+    // ─── Oxygen (upgrade-derived) ─────────────────────────────────────────────
+    private static final float OXY_DRAIN = 0.03f;
+    private float maxOxygen;
     private float oxygen;
+
+    // ─── O2 canisters ────────────────────────────────────────────────────────
+    private final ArrayList<float[]> canisters = new ArrayList<>();
+    private float lastCanisterSpawnY;
+    private float o2RestoreAmount;
+    private float collectRange;
+
+    // ─── Coin items ──────────────────────────────────────────────────────────
+    private final ArrayList<float[]> coinItems = new ArrayList<>();
+    private float lastCoinSpawnY;
+    private int   runCoins;
 
     // ─── Game state ──────────────────────────────────────────────────────────
     private volatile boolean gameOver;
@@ -57,20 +76,27 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     private static final int BG_R_END   = 20,  BG_G_END   = 12, BG_B_END   = 6;
 
     // ─── Paints (allocated once, never inside the draw loop) ─────────────────
-    private final Paint bgPaint       = new Paint();
-    private final Paint molePaint     = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint eyePaint      = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint gasPaint      = new Paint();
-    private final Paint hudPaint      = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint hintPaint     = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint oxyBgPaint    = new Paint();
-    private final Paint oxyFillPaint  = new Paint();
-    private final Paint oxyLabelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint dimPaint      = new Paint();
-    private final Paint gameOverPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint bgPaint          = new Paint();
+    private final Paint molePaint        = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint eyePaint         = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint gasPaint         = new Paint();
+    private final Paint hudPaint         = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint coinHudPaint     = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint hintPaint        = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint oxyBgPaint       = new Paint();
+    private final Paint oxyFillPaint     = new Paint();
+    private final Paint oxyLabelPaint    = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint canisterPaint    = new Paint();
+    private final Paint canisterCrossPaint = new Paint();
+    private final Paint coinFillPaint    = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint coinOutlinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint dimPaint         = new Paint();
+    private final Paint gameOverPaint    = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint gameOverSubPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     public GameView(Context context) {
         super(context);
+        this.context = context.getApplicationContext();
         getHolder().addCallback(this);
         setFocusable(true);
 
@@ -87,6 +113,11 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         hudPaint.setTextAlign(Paint.Align.CENTER);
         hudPaint.setFakeBoldText(true);
 
+        coinHudPaint.setColor(Color.rgb(245, 197, 66));
+        coinHudPaint.setTextSize(sp(dm, 20f));
+        coinHudPaint.setTextAlign(Paint.Align.LEFT);
+        coinHudPaint.setFakeBoldText(true);
+
         hintPaint.setColor(Color.WHITE);
         hintPaint.setTextSize(sp(dm, 18f));
 
@@ -96,12 +127,30 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         oxyLabelPaint.setTextSize(sp(dm, 14f));
         oxyLabelPaint.setTextAlign(Paint.Align.CENTER);
 
-        dimPaint.setColor(Color.argb(150, 0, 0, 0));
+        canisterPaint.setColor(Color.rgb(30, 140, 50));
+        canisterPaint.setStyle(Paint.Style.FILL);
+
+        canisterCrossPaint.setColor(Color.WHITE);
+        canisterCrossPaint.setStyle(Paint.Style.FILL);
+
+        coinFillPaint.setColor(Color.rgb(245, 197, 66));
+        coinFillPaint.setStyle(Paint.Style.FILL);
+
+        coinOutlinePaint.setColor(Color.rgb(150, 110, 20));
+        coinOutlinePaint.setStyle(Paint.Style.STROKE);
+        coinOutlinePaint.setStrokeWidth(2f);
+        coinOutlinePaint.setAntiAlias(true);
+
+        dimPaint.setColor(Color.argb(160, 0, 0, 0));
 
         gameOverPaint.setColor(Color.RED);
         gameOverPaint.setTextSize(sp(dm, 72f));
         gameOverPaint.setTextAlign(Paint.Align.CENTER);
         gameOverPaint.setFakeBoldText(true);
+
+        gameOverSubPaint.setColor(Color.rgb(200, 200, 200));
+        gameOverSubPaint.setTextSize(sp(dm, 22f));
+        gameOverSubPaint.setTextAlign(Paint.Align.CENTER);
     }
 
     private static float sp(DisplayMetrics dm, float sp) {
@@ -112,13 +161,34 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
     private void resetGame() {
         if (screenW == 0) return; // surface dimensions not yet available
+
+        // Read upgrade levels — applied for the duration of this run
+        int oxyLevel    = PlayerData.getUpgradeOxygen(context);
+        int steerLevel  = PlayerData.getUpgradeSteer(context);
+        int digLevel    = PlayerData.getUpgradeDig(context);
+        int rangeLevel  = PlayerData.getUpgradeRange(context);
+        int refillLevel = PlayerData.getUpgradeO2Refill(context);
+
+        maxOxygen       = 100f + (oxyLevel    - 1) * 25f;  // L1=100  L5=200
+        turnSpeed       = 2f   + (steerLevel  - 1) * 0.5f; // L1=2    L5=4
+        moveSpeed       = 5f   + (digLevel    - 1) * 1.5f; // L1=5    L5=11
+        collectRange    = 50f  + (rangeLevel  - 1) * 15f;  // L1=50   L5=110
+        o2RestoreAmount = 10f  + (refillLevel - 1) * 5f;   // L1=10   L5=30
+
         moleWorldX    = screenW / 2f;
         moleWorldY    = 200f;
         moleAngle     = 0f;
         cameraY       = moleWorldY - screenH * 0.4f;
         gasWorldY     = -300f;
-        oxygen        = MAX_OXYGEN;
+        oxygen        = maxOxygen;
         depthMetres   = 0f;
+        runCoins      = 0;
+
+        canisters.clear();
+        coinItems.clear();
+        lastCanisterSpawnY = moleWorldY;
+        lastCoinSpawnY     = moleWorldY;
+
         pressingLeft  = false;
         pressingRight = false;
         gameOver      = false;
@@ -134,8 +204,8 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
             if (!gameOver) update();
             draw();
 
-            long elapsed  = System.currentTimeMillis() - start;
-            long sleepMs  = 16L - elapsed;
+            long elapsed = System.currentTimeMillis() - start;
+            long sleepMs = 16L - elapsed;
             if (sleepMs > 0) {
                 try { Thread.sleep(sleepMs); }
                 catch (InterruptedException e) { Thread.currentThread().interrupt(); }
@@ -149,13 +219,13 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         if (screenW == 0) return; // surface not ready yet
 
         // ── Steering ─────────────────────────────────────────────────────────
-        if (pressingLeft)  moleAngle = Math.max(moleAngle - TURN_SPEED, -MAX_ANGLE);
-        if (pressingRight) moleAngle = Math.min(moleAngle + TURN_SPEED,  MAX_ANGLE);
+        if (pressingLeft)  moleAngle = Math.max(moleAngle - turnSpeed, -MAX_ANGLE);
+        if (pressingRight) moleAngle = Math.min(moleAngle + turnSpeed,  MAX_ANGLE);
 
         // ── Movement ─────────────────────────────────────────────────────────
         double rad = Math.toRadians(moleAngle);
-        float  vx  = (float)(Math.sin(rad) * MOVE_SPEED);
-        float  vy  = (float)(Math.cos(rad) * MOVE_SPEED); // positive = downward
+        float  vx  = (float)(Math.sin(rad) * moveSpeed);
+        float  vy  = (float)(Math.cos(rad) * moveSpeed); // positive = downward
 
         moleWorldX += vx;
         moleWorldY += vy;
@@ -169,6 +239,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         gasWorldY += GAS_SPEED;
         if (gasWorldY >= moleWorldY) {
             Log.d(TAG, "Game over: gas reached mole at depth " + (int) depthMetres + "m");
+            PlayerData.addCoins(context, runCoins);
             gameOver = true;
             return;
         }
@@ -177,17 +248,58 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         oxygen = Math.max(oxygen - OXY_DRAIN, 0f);
         if (oxygen <= 0f) {
             Log.d(TAG, "Game over: oxygen depleted at depth " + (int) depthMetres + "m");
+            PlayerData.addCoins(context, runCoins);
             gameOver = true;
             return;
+        }
+
+        // ── Spawn O2 canisters (every ~400 world units below mole) ───────────
+        if (moleWorldY - lastCanisterSpawnY >= 400f) {
+            lastCanisterSpawnY = moleWorldY;
+            float spawnX = MOLE_RADIUS + (float)(Math.random() * (screenW - 2 * MOLE_RADIUS));
+            float spawnY = moleWorldY + screenH * 0.85f; // spawn below visible area
+            canisters.add(new float[]{spawnX, spawnY});
+        }
+
+        // ── Spawn coins (every ~150 world units below mole) ──────────────────
+        if (moleWorldY - lastCoinSpawnY >= 150f) {
+            lastCoinSpawnY = moleWorldY;
+            float spawnX = MOLE_RADIUS + (float)(Math.random() * (screenW - 2 * MOLE_RADIUS));
+            float spawnY = moleWorldY + screenH * 0.65f;
+            coinItems.add(new float[]{spawnX, spawnY});
+        }
+
+        // ── Collect canisters ─────────────────────────────────────────────────
+        float rangeSq = collectRange * collectRange;
+        Iterator<float[]> canIter = canisters.iterator();
+        while (canIter.hasNext()) {
+            float[] c  = canIter.next();
+            float   dx = moleWorldX - c[0];
+            float   dy = moleWorldY - c[1];
+            if (dx * dx + dy * dy < rangeSq) {
+                canIter.remove();
+                oxygen = Math.min(oxygen + o2RestoreAmount, maxOxygen);
+            }
+        }
+
+        // ── Collect coins ─────────────────────────────────────────────────────
+        Iterator<float[]> coinIter = coinItems.iterator();
+        while (coinIter.hasNext()) {
+            float[] c  = coinIter.next();
+            float   dx = moleWorldX - c[0];
+            float   dy = moleWorldY - c[1];
+            if (dx * dx + dy * dy < rangeSq) {
+                coinIter.remove();
+                runCoins++;
+            }
         }
 
         // ── PLACEHOLDER: systems to add here ─────────────────────────────────
         // - Terrain tile generation and rendering
         // - Material/item spawning and proximity collection
         // - Enemy spawning and collision
-        // - O2 canister pickup spawning
         // - Coin conversion on run end
-        // - Upgrade stat application from PlayerData
+        // - Upgrade stat application from PlayerData (claw, rarity)
         // ─────────────────────────────────────────────────────────────────────
     }
 
@@ -208,10 +320,32 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
             ));
             canvas.drawRect(0, 0, screenW, screenH, bgPaint);
 
-            // ── Gas cloud (fills screen top down to gas line) ─────────────────
+            // ── Gas cloud (fills from screen top down to gas line) ─────────────
             float gasScreenY = gasWorldY - cameraY;
             if (gasScreenY > 0) {
                 canvas.drawRect(0, 0, screenW, gasScreenY, gasPaint);
+            }
+
+            // ── O2 canisters ──────────────────────────────────────────────────
+            for (float[] c : canisters) {
+                float sx = c[0];
+                float sy = c[1] - cameraY;
+                if (sy < -40 || sy > screenH + 40) continue;
+                // Canister body (20×30)
+                canvas.drawRect(sx - 10, sy - 15, sx + 10, sy + 15, canisterPaint);
+                // Plus sign: horizontal bar
+                canvas.drawRect(sx - 7,  sy - 2,  sx + 7,  sy + 2,  canisterCrossPaint);
+                // Plus sign: vertical bar
+                canvas.drawRect(sx - 2,  sy - 9,  sx + 2,  sy + 9,  canisterCrossPaint);
+            }
+
+            // ── Coin items ────────────────────────────────────────────────────
+            for (float[] c : coinItems) {
+                float sx = c[0];
+                float sy = c[1] - cameraY;
+                if (sy < -20 || sy > screenH + 20) continue;
+                canvas.drawCircle(sx, sy, 10f, coinFillPaint);
+                canvas.drawCircle(sx, sy, 10f, coinOutlinePaint);
             }
 
             // ── Mole (rotated to face dig direction) ──────────────────────────
@@ -233,17 +367,20 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
             canvas.drawRect(barX, barTop, barX + barW, barBottom, oxyBgPaint);
 
-            float fillFrac = oxygen / MAX_OXYGEN;
+            float fillFrac = oxygen / maxOxygen;
             int   fillTop  = (int)(barBottom - barH * fillFrac);
             oxyFillPaint.setColor(oxyBarColor(fillFrac));
             canvas.drawRect(barX, fillTop, barX + barW, barBottom, oxyFillPaint);
 
             canvas.drawText("O2", barX + barW / 2f, barTop - 8f, oxyLabelPaint);
 
-            // ── Depth counter (top centre) ────────────────────────────────────
+            // ── HUD: depth (top centre) ───────────────────────────────────────
             canvas.drawText((int) depthMetres + "m", screenW / 2f, hudPaint.getTextSize() + 16f, hudPaint);
 
-            // ── Zone hints (fade from 15m, invisible by 20m) ──────────────────
+            // ── HUD: coin counter (top left) ──────────────────────────────────
+            canvas.drawText("● " + runCoins, 24f, coinHudPaint.getTextSize() + 20f, coinHudPaint);
+
+            // ── HUD: zone hints (fade from 15m, invisible by 20m) ─────────────
             if (depthMetres < 20f) {
                 int alpha = depthMetres <= 15f
                     ? 180
@@ -258,7 +395,10 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
             // ── Game over overlay ─────────────────────────────────────────────
             if (gameOver) {
                 canvas.drawRect(0, 0, screenW, screenH, dimPaint);
-                canvas.drawText("GAME OVER", screenW / 2f, screenH / 2f, gameOverPaint);
+                float cy = screenH / 2f;
+                canvas.drawText("GAME OVER",       screenW / 2f, cy - 40f, gameOverPaint);
+                canvas.drawText("COINS: +" + runCoins, screenW / 2f, cy + 50f, gameOverSubPaint);
+                canvas.drawText("tap to play again",   screenW / 2f, cy + 90f, gameOverSubPaint);
             }
 
         } finally {

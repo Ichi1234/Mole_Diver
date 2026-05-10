@@ -7,15 +7,21 @@ public class PlayerData {
 
     private static final String PREFS_NAME = "mole_diver_prefs";
 
-    private static final String KEY_MUSIC_ENABLED     = "music_enabled";
-    private static final String KEY_SFX_ENABLED       = "sfx_enabled";
-    private static final String KEY_VIBRATION_ENABLED = "vibration_enabled";
-    private static final String KEY_BEST_DEPTH        = "best_depth";
-    private static final String KEY_TOTAL_COINS       = "total_coins";
-    private static final String KEY_UPGRADE_OXYGEN    = "upgrade_oxygen";
-    private static final String KEY_UPGRADE_SPEED     = "upgrade_speed";
-    private static final String KEY_UPGRADE_RANGE     = "upgrade_range";
-    private static final String KEY_COLLECTED_PREFIX  = "collected_";
+    private static final String KEY_MUSIC_ENABLED      = "music_enabled";
+    private static final String KEY_SFX_ENABLED        = "sfx_enabled";
+    private static final String KEY_VIBRATION_ENABLED  = "vibration_enabled";
+    private static final String KEY_BEST_DEPTH         = "best_depth";
+    private static final String KEY_TOTAL_COINS        = "total_coins";
+
+    private static final String KEY_UPGRADE_OXYGEN     = "upgrade_oxygen";
+    private static final String KEY_UPGRADE_STEER      = "upgrade_steer_speed";
+    private static final String KEY_UPGRADE_DIG        = "upgrade_dig_speed";
+    private static final String KEY_UPGRADE_RANGE      = "upgrade_range";
+    private static final String KEY_UPGRADE_O2_REFILL  = "upgrade_o2_refill";
+    private static final String KEY_UPGRADE_CLAW       = "upgrade_claw";
+    private static final String KEY_UPGRADE_RARITY     = "upgrade_rarity";
+
+    private static final String KEY_COLLECTED_PREFIX   = "collected_";
 
     private PlayerData() {}
 
@@ -95,12 +101,20 @@ public class PlayerData {
         prefs(ctx).edit().putInt(KEY_UPGRADE_OXYGEN, Math.min(level, 5)).apply();
     }
 
-    public static int getUpgradeSpeed(Context ctx) {
-        return prefs(ctx).getInt(KEY_UPGRADE_SPEED, 1);
+    public static int getUpgradeSteer(Context ctx) {
+        return prefs(ctx).getInt(KEY_UPGRADE_STEER, 1);
     }
 
-    public static void setUpgradeSpeed(Context ctx, int level) {
-        prefs(ctx).edit().putInt(KEY_UPGRADE_SPEED, Math.min(level, 5)).apply();
+    public static void setUpgradeSteer(Context ctx, int level) {
+        prefs(ctx).edit().putInt(KEY_UPGRADE_STEER, Math.min(level, 5)).apply();
+    }
+
+    public static int getUpgradeDig(Context ctx) {
+        return prefs(ctx).getInt(KEY_UPGRADE_DIG, 1);
+    }
+
+    public static void setUpgradeDig(Context ctx, int level) {
+        prefs(ctx).edit().putInt(KEY_UPGRADE_DIG, Math.min(level, 5)).apply();
     }
 
     public static int getUpgradeRange(Context ctx) {
@@ -109,6 +123,30 @@ public class PlayerData {
 
     public static void setUpgradeRange(Context ctx, int level) {
         prefs(ctx).edit().putInt(KEY_UPGRADE_RANGE, Math.min(level, 5)).apply();
+    }
+
+    public static int getUpgradeO2Refill(Context ctx) {
+        return prefs(ctx).getInt(KEY_UPGRADE_O2_REFILL, 1);
+    }
+
+    public static void setUpgradeO2Refill(Context ctx, int level) {
+        prefs(ctx).edit().putInt(KEY_UPGRADE_O2_REFILL, Math.min(level, 5)).apply();
+    }
+
+    public static int getUpgradeClaw(Context ctx) {
+        return prefs(ctx).getInt(KEY_UPGRADE_CLAW, 1);
+    }
+
+    public static void setUpgradeClaw(Context ctx, int level) {
+        prefs(ctx).edit().putInt(KEY_UPGRADE_CLAW, Math.min(level, 5)).apply();
+    }
+
+    public static int getUpgradeRarity(Context ctx) {
+        return prefs(ctx).getInt(KEY_UPGRADE_RARITY, 1);
+    }
+
+    public static void setUpgradeRarity(Context ctx, int level) {
+        prefs(ctx).edit().putInt(KEY_UPGRADE_RARITY, Math.min(level, 5)).apply();
     }
 
     /**
