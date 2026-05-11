@@ -38,12 +38,12 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     // ─── Terrain layer table ──────────────────────────────────────────────────
     // Columns: minDepth, maxDepth, topR, topG, topB, botR, botG, botB
     private static final int[][] LAYERS = {
-            {0, 100, 101, 67, 33, 80, 50, 25},  // 0 Topsoil
-            {100, 300, 80, 50, 25, 140, 90, 60},  // 1 Clay
-            {300, 600, 140, 90, 60, 80, 80, 85},  // 2 Rock
-            {600, 1000, 80, 80, 85, 45, 45, 50},  // 3 Deep Rock
-            {1000, 1500, 45, 45, 50, 25, 20, 22},  // 4 Bedrock
-            {1500, 999999, 25, 20, 22, 15, 5, 5},  // 5 Core
+            {0, 500, 101, 67, 33, 80, 50, 25},  // 0 Topsoil
+            {500, 1000, 80, 50, 25, 140, 90, 60},  // 1 Clay
+            {1000, 2000, 140, 90, 60, 80, 80, 85},  // 2 Rock
+            {2000, 3000, 80, 80, 85, 45, 45, 50},  // 3 Deep Rock
+            {3000, 4000, 45, 45, 50, 25, 20, 22},  // 4 Bedrock
+            {4000, 999999, 25, 20, 22, 15, 5, 5},  // 5 Core
     };
     private static final String[] LAYER_NAMES = {
             "TOPSOIL", "CLAY LAYER", "ROCK LAYER", "DEEP ROCK", "BEDROCK", "THE CORE"
@@ -96,8 +96,48 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     // ─── Camera / depth ──────────────────────────────────────────────────────
     private float cameraY, depthMetres;
 
+    private float introCameraY; // camera position during intro pan
+
+
+    // ─── Ending sequence ──────────────────────────────────────────────────────
+    private static final float ENDING_DEPTH = 10000;
+    private static final int ENDING_STATE_APPROACH = 0;  // mole god growing
+    private static final int ENDING_STATE_TRANSFORM = 1; // swap to mole_god_2
+    private static final int ENDING_STATE_DIALOG = 2;    // dialog visible
+    private static final int ENDING_STATE_FADE_WHITE = 3; // fade to white then finish
+
+    private boolean isEnding = false;
+    private int endingState = ENDING_STATE_APPROACH;
+    private int endingTimer = 0;
+    private float moleGodSize = 0f;
+    private static final float MOLE_GOD_MAX_SIZE = 280f;
+    private static final float MOLE_GOD_MIN_SIZE = 60f;
+    private float endingBgAlpha = 0f;   // black overlay alpha 0-1
+    private float endingFadeWhite = 0f; // white overlay alpha 0-1
+
+    private Bitmap bmpMoleGod;
+
+    private Bitmap bmpMoleGodSave;
+    private static final int GOD_SAVE_FRAMES = 4;
+
+    private int godSaveFrameIndex = 0;
+    private int godSaveFrameTimer = 0;
+    private static final int GOD_SAVE_FRAME_DELAY = 8; // ~133ms per frame at 60fps
+
+    private static final String DIALOG_TEXT =
+            "Greetings, little one. I know what thou seekest.\n" +
+                    "Thou seekest the path to survival amidst this crisis,\n" +
+                    "and I shall aid thee. Now close thine eyes,\n" +
+                    "for the time hath come for me to save my descendant...";
+
+    private final Paint endingBgPaint = new Paint();
+    private final Paint endingWhitePaint = new Paint();
+    private final Paint moleGodDialogPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint moleGodDialogBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+
     // ─── Gas ─────────────────────────────────────────────────────────────────
-    private static final float GAS_SPEED = 5.2f;
+//    private static final float GAS_SPEED = 5.2f;
     private float gasWorldY;
 
     // ─── Oxygen ──────────────────────────────────────────────────────────────
@@ -206,6 +246,9 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
     // ─── Paints ──────────────────────────────────────────────────────────────
     private final Paint bgPaint = new Paint();
+    private final Paint fadePaint = new Paint();
+    private final Paint pixelPaint = new Paint();
+
     private final Paint tilePaint = new Paint(Paint.FILTER_BITMAP_FLAG);
     private final Paint molePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint eyePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -292,6 +335,10 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         gameOverPaint.setTextSize(sp(dm, 56f));
         gameOverPaint.setTextAlign(Paint.Align.CENTER);
         gameOverPaint.setFakeBoldText(true);
+
+        pixelPaint.setAntiAlias(false);
+        pixelPaint.setFilterBitmap(false);  // disables bilinear filter = crisp pixels
+        pixelPaint.setDither(false);
 
         gameOverSubPaint.setColor(Color.rgb(200, 200, 200));
         gameOverSubPaint.setTextSize(sp(dm, 17f));
@@ -382,6 +429,17 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         goButtonTextPaint.setTextSize(sp(dm, 14f));
         goButtonTextPaint.setTextAlign(Paint.Align.CENTER);
         goButtonTextPaint.setFakeBoldText(true);
+
+
+        endingBgPaint.setColor(Color.BLACK);
+        endingWhitePaint.setColor(Color.WHITE);
+
+        moleGodDialogPaint.setColor(Color.WHITE);
+        moleGodDialogPaint.setTextAlign(Paint.Align.CENTER);
+        moleGodDialogPaint.setTextSize(sp(dm, 15f));
+        moleGodDialogPaint.setShadowLayer(3f, 1f, 1f, Color.BLACK);
+
+        moleGodDialogBgPaint.setColor(Color.argb(180, 0, 0, 0));
 
         // ── Audio init ────────────────────────────────────────────────────────
         try {
@@ -508,6 +566,11 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         bmpDead = scale(BitmapFactory.decodeResource(res, R.drawable.tunn_dead),
                 124, 124);
 
+        bmpMoleGod  = BitmapFactory.decodeResource(res, R.drawable.mole_god);
+        BitmapFactory.Options opts = new BitmapFactory.Options();
+        opts.inScaled = false;  // load at exact pixel dimensions, no density scaling
+        bmpMoleGodSave = BitmapFactory.decodeResource(res, R.drawable.mole_god_save_the_world, opts);
+
         // Enemy sprites — load, scale, then pre-create h-flipped copies
         Matrix flipMatrix = new Matrix();
         flipMatrix.preScale(-1, 1);
@@ -605,6 +668,9 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         }
         moleFrameSrcW = 0;
         moleFrameSrcH = 0;
+
+        if (bmpMoleGod != null)  { bmpMoleGod.recycle();  bmpMoleGod  = null; }
+        if (bmpMoleGodSave != null) { bmpMoleGodSave.recycle(); bmpMoleGodSave = null; }
     }
 
     // ─── Enemy helpers ────────────────────────────────────────────────────────
@@ -633,6 +699,8 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     // ─── State reset ─────────────────────────────────────────────────────────
 
     private void resetGame() {
+        transitionFadeTimer = 0;
+
         if (screenW == 0) return;
 
         int oxyLevel = PlayerData.getUpgradeOxygen(context);
@@ -649,11 +717,12 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         collectRange = 50f + (rangeLevel - 1) * 15f;
         o2RestoreAmount = 10f + (refillLevel - 1) * 5f;
 
-        moleWorldX = screenW / 2f;
-        moleWorldY = GRASS_HEIGHT; // Mole starts sitting on the soil, boundary of grass
-        moleAngle = 0f;
-        cameraY = moleWorldY - screenH * 0.4f;
-        gasWorldY = -300f;
+        moleWorldX  = screenW / 2f;
+        moleWorldY  = GRASS_HEIGHT + -80;
+        moleAngle   = 0f;
+        cameraY     = moleWorldY - screenH * 0.4f;
+        introCameraY = moleWorldY - screenH * 0.6f;  // camera starts showing grass + sky above
+        gasWorldY   = -300f;
         oxygen = maxOxygen;
         depthMetres = 0f;
         runCoins = 0;
@@ -704,8 +773,17 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         moleFrameTimer = 0;
         introFrameIndex = 0;
         introFrameTimer = 0;
+        godSaveFrameIndex = 0;
+        godSaveFrameTimer = 0;
         newItemsFoundThisRun = 0;
         newBestDepthThisRun = false;
+
+        isEnding = false;
+        endingState = ENDING_STATE_APPROACH;
+        endingTimer = 0;
+        moleGodSize = MOLE_GOD_MIN_SIZE;
+        endingBgAlpha = 0f;
+        endingFadeWhite = 0f;
     }
 
     // ─── Game loop ───────────────────────────────────────────────────────────
@@ -728,12 +806,23 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     }
 
     // ─── Update ──────────────────────────────────────────────────────────────
-
+    private int transitionFadeTimer = 0;
+    private static final int FADE_DURATION = 50; // frames, ~0.5s at 60fps
     private void update() {
         if (screenW == 0) return;
         frameCount++;
 
+        // Tick fade timer and flip to gameplay at the halfway point (black screen)
+        if (transitionFadeTimer > 0) {
+            transitionFadeTimer--;
+            if (transitionFadeTimer == FADE_DURATION) {
+                // Halfway — screen is fully black, now safe to switch
+                isIntro = false;
+            }
+        }
+
         if (isIntro) {
+            // Animate intro sprite
             if (moleIntroSheet != null) {
                 introFrameTimer++;
                 if (introFrameTimer >= 8) {
@@ -741,16 +830,34 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
                     introFrameIndex = (introFrameIndex + 1) % INTRO_SHEET_FRAMES;
                 }
             }
+            // Pan camera down toward gameplay position when transitioning
             if (isTransitioning) {
-                moleWorldY += 4f;
-                if (moleWorldY >= GRASS_HEIGHT) {
-                    moleWorldY = GRASS_HEIGHT;
-                    isIntro = false;
+                float targetCameraY = (GRASS_HEIGHT + MOLE_RADIUS) - screenH * 0.4f;
+                float diff = targetCameraY - introCameraY;
+                float step = 8f;
+
+                // Start fade when camera is close but not yet at target
+                if (transitionFadeTimer == 0 && Math.abs(diff) < screenH * 0.3f) {
+                    transitionFadeTimer = FADE_DURATION * 2;
+                }
+
+                // Keep panning even while fading
+                if (Math.abs(diff) > step) {
+                    introCameraY += Math.signum(diff) * step;
+                }
+
+                // Switch to game at the black frame (halfway through fade)
+                if (transitionFadeTimer == FADE_DURATION) {
+                    introCameraY = targetCameraY;
+                    cameraY = targetCameraY;
                     isTransitioning = false;
+                    isIntro = false;
                 }
             }
-            // NOT transitioning = mole stands still, waiting for tap
-            return;
+
+
+
+            return; // mole never moves during intro
         }
 
         if (gameOver) return;
@@ -775,6 +882,21 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         cameraY = moleWorldY - screenH * 0.4f;
         depthMetres = Math.max((moleWorldY - GRASS_HEIGHT) / 10f, 0f);
 
+        // ── Ending trigger ────────────────────────────────────────────────
+        if (!isEnding && depthMetres >= ENDING_DEPTH) {
+            isEnding = true;
+            endingState = ENDING_STATE_APPROACH;
+            endingTimer = 0;
+            moleGodSize = MOLE_GOD_MIN_SIZE;
+            endingBgAlpha = 0f;
+            // Stop gas and oxygen drain during ending
+        }
+
+        if (isEnding) {
+            updateEnding();
+            return; // skip normal gameplay update
+        }
+
         // Terrain layer transition detection
         int newLayerIdx = layerIndex(depthMetres);
         if (newLayerIdx != currentLayerIdx) {
@@ -786,10 +908,16 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         }
 
         // Gas
-        gasWorldY += GAS_SPEED;
+        // Starts slow, gets faster the deeper player goes, caps at moveSpeed * 0.85f
+        float minGasSpeed = 5f;
+        float maxGasSpeed = moveSpeed * 0.9f;
+        float gasAccel = Math.min(depthMetres / 400f, 1f); // reaches max by 400
+        float gasSpeed = minGasSpeed + (maxGasSpeed - minGasSpeed) * gasAccel;
+        gasWorldY += gasSpeed;
+
         if (gasWorldY >= moleWorldY) {
             Log.d(TAG, "Game over: gas at depth " + (int) depthMetres + "m");
-            deathCause = "GAS CAUGHT YOU";
+            deathCause = "POISON GAS REACHED YOU";
             saveRunResults();
             return;
         }
@@ -958,6 +1086,65 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         }
     }
 
+    private void updateEnding() {
+        endingTimer++;
+
+        switch (endingState) {
+
+            case ENDING_STATE_APPROACH:
+                // Grow mole god, fade bg to black simultaneously
+                moleGodSize = Math.min(moleGodSize + 1.2f, MOLE_GOD_MAX_SIZE);
+                endingBgAlpha = Math.min(endingBgAlpha + 0.008f, 1f);
+
+                // When fully grown and bg is black, transform
+                if (moleGodSize >= MOLE_GOD_MAX_SIZE && endingBgAlpha >= 1f) {
+                    endingState = ENDING_STATE_TRANSFORM;
+                    endingTimer = 0;
+                }
+                break;
+
+            case ENDING_STATE_TRANSFORM:
+                // Tick save animation
+                godSaveFrameTimer++;
+                if (godSaveFrameTimer >= GOD_SAVE_FRAME_DELAY) {
+                    godSaveFrameTimer = 0;
+                    godSaveFrameIndex = (godSaveFrameIndex + 1) % GOD_SAVE_FRAMES;
+                }
+                if (endingTimer >= 40) {
+                    endingState = ENDING_STATE_DIALOG;
+                    endingTimer = 0;
+                }
+                break;
+
+            case ENDING_STATE_DIALOG:
+                // Keep animating during dialog too
+                godSaveFrameTimer++;
+                if (godSaveFrameTimer >= GOD_SAVE_FRAME_DELAY) {
+                    godSaveFrameTimer = 0;
+                    godSaveFrameIndex = (godSaveFrameIndex + 1) % GOD_SAVE_FRAMES;
+                }
+                if (endingTimer >= 360) {
+                    endingState = ENDING_STATE_FADE_WHITE;
+                    endingTimer = 0;
+                }
+                break;
+
+            case ENDING_STATE_FADE_WHITE:
+                endingFadeWhite = Math.min(endingFadeWhite + 0.018f, 1f);
+                if (endingFadeWhite >= 1f) {
+                    postDelayed(() -> {
+                        Context ctx = getContext();
+                        if (ctx instanceof GameActivity) {
+                            ((GameActivity) ctx).finish();
+                        }
+                    }, 2000); // 3000ms = 3 seconds of pure white before closing
+                    // Return to menu
+
+                }
+                break;
+        }
+    }
+
     // ─── Draw ────────────────────────────────────────────────────────────────
 
    private void draw() {
@@ -966,51 +1153,58 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
       if (canvas == null) return;
 
       try {
+
           float effectiveCameraY;
-          float moleScreenY;
+          float moleScreenY = screenH * 0.4f;
 
           if (isIntro) {
-              moleScreenY = screenH * 0.65f;
-              effectiveCameraY = moleWorldY - moleScreenY;
+              effectiveCameraY = introCameraY;
+              // Keep mole screen position fixed relative to its world position
+              moleScreenY = moleWorldY - effectiveCameraY;
           } else {
               effectiveCameraY = cameraY;
               moleScreenY = screenH * 0.4f;
           }
 
           // ── Terrain background ────────────────────────────────────────────
-          int layerIdx = layerIndex(depthMetres);
-
-          if (tileBitmaps[layerIdx] == null) {
-              canvas.drawColor(terrainFallbackColor(depthMetres));
+          if (isIntro) {
+              // Show sky → grass → soil; camera pans down on tap
+              drawWorldBackground(canvas, effectiveCameraY);
           } else {
-              float layerMaxDepth = LAYERS[layerIdx][1];
-              float depthToNext = layerMaxDepth - depthMetres;
-              boolean nearBoundary = depthToNext < 50f && layerIdx < LAYERS.length - 1;
+              int layerIdx = layerIndex(depthMetres);
 
-              if (!nearBoundary) {
-                  tilePaint.setAlpha(255);
-                  drawTiledBackground(canvas, tileBitmaps[layerIdx]);
+              if (tileBitmaps[layerIdx] == null) {
+                  canvas.drawColor(terrainFallbackColor(depthMetres));
               } else {
-                  float blend = (50f - depthToNext) / 50f;
-                  int primAlpha = Math.max(0, (int) (255 - blend * 55f));
-                  int secAlpha  = Math.min(255, (int) (blend * 55f));
+                  float layerMaxDepth = LAYERS[layerIdx][1];
+                  float depthToNext = layerMaxDepth - depthMetres;
+                  boolean nearBoundary = depthToNext < 50f && layerIdx < LAYERS.length - 1;
 
-                  tilePaint.setAlpha(primAlpha);
-                  drawTiledBackground(canvas, tileBitmaps[layerIdx]);
+                  if (!nearBoundary) {
+                      tilePaint.setAlpha(255);
+                      drawTiledBackground(canvas, tileBitmaps[layerIdx]);
+                  } else {
+                      float blend = (50f - depthToNext) / 50f;
+                      int primAlpha = Math.max(0, (int) (255 - blend * 55f));
+                      int secAlpha  = Math.min(255, (int) (blend * 55f));
 
-                  if (tileBitmaps[layerIdx + 1] != null && secAlpha > 0) {
-                      tilePaint.setAlpha(secAlpha);
-                      drawTiledBackground(canvas, tileBitmaps[layerIdx + 1]);
+                      tilePaint.setAlpha(primAlpha);
+                      drawTiledBackground(canvas, tileBitmaps[layerIdx]);
+
+                      if (tileBitmaps[layerIdx + 1] != null && secAlpha > 0) {
+                          tilePaint.setAlpha(secAlpha);
+                          drawTiledBackground(canvas, tileBitmaps[layerIdx + 1]);
+                      }
                   }
-              }
 
-              // Depth darkening overlay
-              int[] L = LAYERS[layerIdx];
-              float layerT = L[1] < 999999
-                      ? Math.max(0f, Math.min(1f, (depthMetres - L[0]) / (float)(L[1] - L[0])))
-                      : 1f;
-              int darkAlpha = (int)(layerT * 40f);
-              if (darkAlpha > 0) canvas.drawColor(Color.argb(darkAlpha, 0, 0, 0));
+                  // Depth darkening overlay
+                  int[] L = LAYERS[layerIdx];
+                  float layerT = L[1] < 999999
+                          ? Math.max(0f, Math.min(1f, (depthMetres - L[0]) / (float)(L[1] - L[0])))
+                          : 1f;
+                  int darkAlpha = (int)(layerT * 40f);
+                  if (darkAlpha > 0) canvas.drawColor(Color.argb(darkAlpha, 0, 0, 0));
+              }
           }
 
           // ── Intro mode ────────────────────────────────────────────────────
@@ -1124,12 +1318,105 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
               // ── Game over ─────────────────────────────────────────────────
               if (gameOver) drawGameOver(canvas);
+
+              // ── Eye-blink transition ──────────────────────────────────────────
+              if (transitionFadeTimer > 0) {
+                  int half = FADE_DURATION;
+                  float alpha;
+                  if (transitionFadeTimer > half) {
+                      alpha = (transitionFadeTimer - half) / (float) half;
+                  } else {
+                      alpha = transitionFadeTimer / (float) half;
+                  }
+                  fadePaint.setColor(Color.BLACK);
+                  fadePaint.setAlpha((int)(alpha * 255));
+                  canvas.drawRect(0, 0, screenW, screenH, fadePaint);
+              }
+
+              // ── Ending sequence ───────────────────────────────────────────────
+              if (isEnding) {
+                  drawEnding(canvas);
+              }
           }
+
 
       } finally {
           holder.unlockCanvasAndPost(canvas);
       }
   }
+
+    private void drawEnding(Canvas canvas) {
+        float cx = screenW / 2f;
+        float cy = screenH * 0.42f; // slightly above center
+
+        // Black bg overlay
+        if (endingBgAlpha > 0f) {
+            endingBgPaint.setAlpha((int)(endingBgAlpha * 255));
+            canvas.drawRect(0, 0, screenW, screenH, endingBgPaint);
+        }
+
+        // add:
+        if (endingState < ENDING_STATE_TRANSFORM) {
+            // Phase 1 — static mole_god growing
+            if (bmpMoleGod != null) {
+                float half = moleGodSize / 2f;
+                RectF dst = new RectF(cx - half, cy - half, cx + half, cy + half);
+                canvas.drawBitmap(bmpMoleGod, null, dst, null);
+            }
+        } else {
+            if (bmpMoleGodSave != null) {
+                int frameW = bmpMoleGodSave.getWidth() / GOD_SAVE_FRAMES; // 184/4 = 46
+                int frameH = bmpMoleGodSave.getHeight();                   // 46
+                int srcLeft = godSaveFrameIndex * frameW;
+                Rect src = new Rect(srcLeft, 0, srcLeft + frameW, frameH);
+                float half = (int)(moleGodSize / 2f);  // snap to integer pixels
+                float left = (int)(cx - half);
+                float top  = (int)(cy - half);
+                RectF dst = new RectF(left, top, left + (int)moleGodSize, top + (int)moleGodSize);
+                canvas.drawBitmap(bmpMoleGodSave, src, dst, pixelPaint);
+            }
+        }
+
+        // Dialog box
+        if (endingState == ENDING_STATE_DIALOG) {
+            float dialogAlpha = Math.min(endingTimer / 30f, 1f); // fade in over 30 frames
+            float boxLeft   = screenW * 0.05f;
+            float boxRight  = screenW * 0.95f;
+            float boxTop    = cy + moleGodSize / 2f + 24f;
+            float boxBottom = boxTop + screenH * 0.28f;
+
+            moleGodDialogBgPaint.setAlpha((int)(dialogAlpha * 180));
+            canvas.drawRoundRect(new RectF(boxLeft, boxTop, boxRight, boxBottom),
+                    20f, 20f, moleGodDialogBgPaint);
+
+            moleGodDialogPaint.setAlpha((int)(dialogAlpha * 255));
+
+            // Draw dialog line by line
+            String[] lines = DIALOG_TEXT.split("\n");
+            float lineHeight = moleGodDialogPaint.getTextSize() * 1.55f;
+            float totalH = lines.length * lineHeight;
+            float startY = (boxTop + boxBottom) / 2f - totalH / 2f + moleGodDialogPaint.getTextSize();
+            for (String line : lines) {
+                canvas.drawText(line, cx, startY, moleGodDialogPaint);
+                startY += lineHeight;
+            }
+
+            // Tap hint
+            if (endingTimer > 60) {
+                Paint tapPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                tapPaint.setColor(Color.argb((int)(dialogAlpha * 140), 255, 255, 255));
+                tapPaint.setTextSize(moleGodDialogPaint.getTextSize() * 0.8f);
+                tapPaint.setTextAlign(Paint.Align.CENTER);
+                canvas.drawText("[ tap to continue ]", cx, boxBottom - 16f, tapPaint);
+            }
+        }
+
+        // White fade overlay
+        if (endingFadeWhite > 0f) {
+            endingWhitePaint.setAlpha((int)(endingFadeWhite * 255));
+            canvas.drawRect(0, 0, screenW, screenH, endingWhitePaint);
+        }
+    }
 
     private void drawWorldBackground(Canvas canvas, float effectiveCameraY) {
         float surfaceScreenY = -effectiveCameraY; // World Y=0 is the surface (top of grass)
@@ -1277,7 +1564,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
         canvas.drawText("GAME OVER", screenCenterX, titleY, gameOverPaint);
         gameOverSubPaint.setColor(Color.rgb(160, 230, 70));
-        canvas.drawText("POISON GAS REACHED YOU", screenCenterX, subtitleY, gameOverSubPaint);
+        canvas.drawText(deathCause, screenCenterX, subtitleY, gameOverSubPaint);
 
         float statsLeft = sp(dm, 16f);
         float statsTop = subtitleY + sp(dm, 32f);
@@ -1373,6 +1660,16 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
                 }
             }
 
+            return true;
+        }
+
+        // ── Ending dialog tap ──────────────────────────────────────────
+        if (isEnding) {
+            if (event.getAction() == MotionEvent.ACTION_DOWN
+                    && endingState == ENDING_STATE_DIALOG) {
+                endingState = ENDING_STATE_FADE_WHITE;
+                endingTimer = 0;
+            }
             return true;
         }
 
