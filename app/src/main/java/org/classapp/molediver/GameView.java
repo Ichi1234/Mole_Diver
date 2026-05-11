@@ -832,7 +832,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
         if (gasWorldY >= moleWorldY) {
             Log.d(TAG, "Game over: gas at depth " + (int) depthMetres + "m");
-            deathCause = "GAS CAUGHT YOU";
+            deathCause = "POISON GAS REACHED YOU";
             saveRunResults();
             return;
         }
@@ -1342,7 +1342,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
         canvas.drawText("GAME OVER", screenCenterX, titleY, gameOverPaint);
         gameOverSubPaint.setColor(Color.rgb(160, 230, 70));
-        canvas.drawText("POISON GAS REACHED YOU", screenCenterX, subtitleY, gameOverSubPaint);
+        canvas.drawText(deathCause, screenCenterX, subtitleY, gameOverSubPaint);
 
         float statsLeft = sp(dm, 16f);
         float statsTop = subtitleY + sp(dm, 32f);
