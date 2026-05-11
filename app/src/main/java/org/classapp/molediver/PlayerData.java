@@ -22,6 +22,7 @@ public class PlayerData {
     private static final String KEY_UPGRADE_RARITY     = "upgrade_rarity";
 
     private static final String KEY_COLLECTED_PREFIX   = "collected_";
+    private static final String KEY_SET_REWARD_PREFIX  = "set_reward_";
 
     private PlayerData() {}
 
@@ -173,5 +174,34 @@ public class PlayerData {
 
     public static void markItemCollected(Context ctx, int id) {
         prefs(ctx).edit().putBoolean(KEY_COLLECTED_PREFIX + id, true).apply();
+    }
+
+    // -------------------------------------------------------------------------
+    // Set rewards
+    // -------------------------------------------------------------------------
+
+    /** Sanitises the set name into a stable SharedPreferences key. */
+    private static String setRewardKey(String setName) {
+        return KEY_SET_REWARD_PREFIX + setName.toLowerCase()
+                .replace(' ', '_')
+                .replace('\'', '_');
+    }
+
+    public static boolean isSetRewardClaimed(Context ctx, String setName) {
+        return prefs(ctx).getBoolean(setRewardKey(setName), false);
+    }
+
+    public static void claimSetReward(Context ctx, String setName) {
+        prefs(ctx).edit().putBoolean(setRewardKey(setName), true).apply();
+    }
+
+    /** True when "Legend of the Mole" set reward is active (2x coin multiplier). */
+    public static boolean hasCoinMultiplier(Context ctx) {
+        return isSetRewardClaimed(ctx, "Legend of the Mole");
+    }
+
+    /** True when "Fool's Hoard" set reward is active (common items worth 2x). */
+    public static boolean hasCommonDoubler(Context ctx) {
+        return isSetRewardClaimed(ctx, "Fool's Hoard");
     }
 }

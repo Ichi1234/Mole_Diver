@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Root acts as the rarity border: background color set programmatically, padding = border width -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/cellRoot"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="#333333"
+    android:padding="2dp">
+
+    <!-- Inner card face -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#0F1A0F"
+        android:gravity="center"
+        android:padding="6dp">
+
+        <!-- Sprite + lock badge overlay -->
+        <FrameLayout
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginBottom="4dp">
+
+            <ImageView
+                android:id="@+id/imgItem"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter" />
+
+            <!-- Small badge shown for undiscovered items -->
+            <TextView
+                android:id="@+id/tvLock"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:text=""
+                android:textColor="#AAAAAA"
+                android:textSize="9sp"
+                android:gravity="center"
+                android:background="#99000000"
+                android:layout_gravity="top|end"
+                android:visibility="gone" />
+
+        </FrameLayout>
+
+        <!-- Item name or "???" -->
+        <TextView
+            android:id="@+id/tvItemName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="#444444"
+            android:textSize="8sp"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:maxLines="2"
+            android:ellipsize="end" />
+
+    </LinearLayout>
+</LinearLayout>
