@@ -100,7 +100,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
 
     // ─── Ending sequence ──────────────────────────────────────────────────────
-    private static final float ENDING_DEPTH = 2000;
+    private static final float ENDING_DEPTH = 10000;
     private static final int ENDING_STATE_APPROACH = 0;  // mole god growing
     private static final int ENDING_STATE_TRANSFORM = 1; // swap to mole_god_2
     private static final int ENDING_STATE_DIALOG = 2;    // dialog visible
