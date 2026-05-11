@@ -97,7 +97,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     private float cameraY, depthMetres;
 
     // ─── Gas ─────────────────────────────────────────────────────────────────
-    private static final float GAS_SPEED = 1.2f;
+    private static final float GAS_SPEED = 5.2f;
     private float gasWorldY;
 
     // ─── Oxygen ──────────────────────────────────────────────────────────────
@@ -162,7 +162,6 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     // ─── Game state ──────────────────────────────────────────────────────────
     private volatile boolean isIntro = true;
     private volatile boolean isTransitioning = false;
-    private float transitionProgress = 0f; // 0.0 to 1.0
 
     private int newItemsFoundThisRun = 0;
     private boolean newBestDepthThisRun = false;
@@ -173,8 +172,8 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     private static final int BG_R_START = 101, BG_G_START = 67, BG_B_START = 33;
     private static final int BG_R_END = 20, BG_G_END = 12, BG_B_END = 6;
     private static final int GRASS_COLOR = Color.rgb(34, 139, 34);
-    private static final int SKY_COLOR = Color.rgb(135, 206, 235);
-    private static final float GRASS_HEIGHT = 200f; // World height of the grass layer
+    private static final int SKY_COLOR   = Color.rgb(135, 206, 235);
+    private static final float GRASS_HEIGHT = 100f; // World height of the grass layer
 
     // ─── Cached bitmaps ──────────────────────────────────────────────────────
     private final SparseArray<Bitmap> itemBitmaps = new SparseArray<>();
@@ -699,7 +698,6 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         }
         isIntro = true;
         isTransitioning = false;
-        transitionProgress = 0f;
 
         // Reset run stats
         moleFrameIndex = 0;
@@ -736,7 +734,6 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         frameCount++;
 
         if (isIntro) {
-            // Update intro animation
             if (moleIntroSheet != null) {
                 introFrameTimer++;
                 if (introFrameTimer >= 8) {
@@ -745,14 +742,14 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
                 }
             }
             if (isTransitioning) {
-                transitionProgress += 0.02f; // Smooth transition progress
-                if (transitionProgress >= 1f) {
+                moleWorldY += 4f;
+                if (moleWorldY >= GRASS_HEIGHT) {
+                    moleWorldY = GRASS_HEIGHT;
                     isIntro = false;
                     isTransitioning = false;
-                    transitionProgress = 0f;
-                    // Actual gameplay starts here
                 }
             }
+            // NOT transitioning = mole stands still, waiting for tap
             return;
         }
 
@@ -963,334 +960,176 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
     // ─── Draw ────────────────────────────────────────────────────────────────
 
-    private void draw() {
-        SurfaceHolder holder = getHolder();
-        Canvas canvas = holder.lockCanvas();
-        if (canvas == null) return;
-
-        try {
-
-            float effectiveCameraY;
-            float moleScreenY;
-
-            if (isIntro) {
-                // Intro animation camera
-                float startY = screenH * 0.7f;
-                float endY = screenH * 0.4f;
-
-                moleScreenY = startY + (endY - startY) * transitionProgress;
-                effectiveCameraY = GRASS_HEIGHT - moleScreenY;
-            } else {
-                effectiveCameraY = cameraY;
-                moleScreenY = screenH * 0.4f;
-            }
-
-            // ── Terrain background ────────────────────────────────────────────
-            int layerIdx = layerIndex(depthMetres);
-
-            if (tileBitmaps[layerIdx] == null) {
-
-                // fallback color
-                canvas.drawColor(terrainFallbackColor(depthMetres));
-
-            } else {
-
-                float layerMaxDepth = LAYERS[layerIdx][1];
-                float depthToNext = layerMaxDepth - depthMetres;
-
-                boolean nearBoundary =
-                        depthToNext < 50f &&
-                                layerIdx < LAYERS.length - 1;
-
-                if (!nearBoundary) {
-
-                    tilePaint.setAlpha(255);
-                    drawTiledBackground(canvas, tileBitmaps[layerIdx]);
-
-                } else {
-
-                    float blend = (50f - depthToNext) / 50f;
-
-                    int primAlpha =
-                            Math.max(0, (int) (255 - blend * 55f));
-
-                    int secAlpha =
-                            Math.min(255, (int) (blend * 55f));
-
-                    tilePaint.setAlpha(primAlpha);
-                    drawTiledBackground(canvas, tileBitmaps[layerIdx]);
-
-                    if (tileBitmaps[layerIdx + 1] != null && secAlpha > 0) {
-                        tilePaint.setAlpha(secAlpha);
-                        drawTiledBackground(canvas, tileBitmaps[layerIdx + 1]);
-                    }
-                }
-
-                // darkening overlay
-                int[] L = LAYERS[layerIdx];
-
-                float layerT =
-                        L[1] < 999999
-                                ? Math.max(
-                                0f,
-                                Math.min(
-                                        1f,
-                                        (depthMetres - L[0]) /
-                                                (float) (L[1] - L[0])
-                                )
-                        )
-                                : 1f;
-
-                int darkAlpha = (int) (layerT * 40f);
-
-                if (darkAlpha > 0) {
-                    canvas.drawColor(Color.argb(darkAlpha, 0, 0, 0));
-                }
-            }
-
-            // ── Intro mode ────────────────────────────────────────────────────
-            if (isIntro) {
-
-                drawIntroMole(canvas, moleScreenY);
-
-                if (!isTransitioning) {
-                    canvas.drawText(
-                            "Press The Screen To Start The game",
-                            screenW / 2f,
-                            screenH - 100f,
-                            introTextPaint
-                    );
-                }
-
-            } else {
-
-                // ── Gas cloud ────────────────────────────────────────────────
-                float gasScreenY = gasWorldY - effectiveCameraY;
-
-                if (gasScreenY > 0) {
-                    canvas.drawRect(0, 0, screenW, gasScreenY, gasPaint);
-                }
-
-                // ── O2 canisters ────────────────────────────────────────────
-                for (float[] c : canisters) {
-
-                    float sx = c[0];
-                    float sy = c[1] - effectiveCameraY;
-
-                    if (sy < -CANISTER_H || sy > screenH + CANISTER_H) {
-                        continue;
-                    }
-
-                    if (bmpCanister != null) {
-                        canvas.drawBitmap(
-                                bmpCanister,
-                                sx - CANISTER_W / 2f,
-                                sy - CANISTER_H / 2f,
-                                null
-                        );
-                    }
-                }
-
-                // ── Coin pickups ────────────────────────────────────────────
-                for (float[] c : coinItems) {
-
-                    float sx = c[0];
-                    float sy = c[1] - effectiveCameraY;
-
-                    if (sy < -COIN_SIZE || sy > screenH + COIN_SIZE) {
-                        continue;
-                    }
-
-                    if (bmpCoin != null) {
-                        canvas.drawBitmap(
-                                bmpCoin,
-                                sx - COIN_SIZE / 2f,
-                                sy - COIN_SIZE / 2f,
-                                null
-                        );
-                    }
-                }
-
-                // ── Item nodes ──────────────────────────────────────────────
-                for (ItemNode node : itemNodes) {
-
-                    float sx = node.worldX;
-                    float sy = node.worldY - effectiveCameraY;
-
-                    if (sy < -ITEM_SIZE || sy > screenH + ITEM_SIZE) {
-                        continue;
-                    }
-
-                    Bitmap bmp = itemBitmaps.get(node.item.id);
-
-                    if (bmp != null) {
-
-                        canvas.drawBitmap(
-                                bmp,
-                                sx - ITEM_SIZE / 2f,
-                                sy - ITEM_SIZE / 2f,
-                                null
-                        );
-
-                    } else {
-
-                        fallbackPaint.setColor(
-                                ItemCatalogue.getBorderColor(node.item.rarity)
-                        );
-
-                        canvas.drawCircle(sx, sy, 16f, fallbackPaint);
-                    }
-                }
-
-                // ── Enemies ─────────────────────────────────────────────────
-                for (Enemy e : enemies) {
-
-                    float sx = e.worldX;
-                    float sy = e.worldY - effectiveCameraY;
-
-                    int sw = ENEMY_SPRITE_W[e.type];
-                    int sh = ENEMY_SPRITE_H[e.type];
-
-                    if (sy < -(sh * 2) || sy > screenH + sh * 2) {
-                        continue;
-                    }
-
-                    Bitmap bmp =
-                            e.velocityX >= 0
-                                    ? enemyBitmapsRight[e.type]
-                                    : enemyBitmapsLeft[e.type];
-
-                    if (bmp != null) {
-
-                        canvas.drawBitmap(
-                                bmp,
-                                sx - sw / 2f,
-                                sy - sh / 2f,
-                                null
-                        );
-
-                    } else {
-
-                        enemyBodyPaint.setColor(ENEMY_COLORS[e.type]);
-                        canvas.drawCircle(sx, sy, e.radius, enemyBodyPaint);
-                    }
-
-                    // enemy label
-                    float dxE = moleWorldX - e.worldX;
-                    float dyE = moleWorldY - e.worldY;
-
-                    if (dxE * dxE + dyE * dyE < 200f * 200f) {
-
-                        enemyLabelPaint.setColor(ENEMY_COLORS[e.type]);
-
-                        canvas.drawText(
-                                ENEMY_NAMES[e.type],
-                                sx,
-                                sy + sh / 2f + enemyLabelPaint.getTextSize(),
-                                enemyLabelPaint
-                        );
-                    }
-                }
-
-                // ── Mole ────────────────────────────────────────────────────
-                drawMole(canvas, moleScreenY);
-
-                // ── Hit flash ───────────────────────────────────────────────
-                if (hitFlashTimer > 0) {
-                    canvas.drawRect(0, 0, screenW, screenH, hitFlashPaint);
-                }
-
-                // ── HUD ─────────────────────────────────────────────────────
-                drawHUD(canvas);
-
-                // ── Enemy counter ───────────────────────────────────────────
-                float dotY = screenH - 30f;
-
-                canvas.drawCircle(screenW - 66f, dotY, 6f, enemyDotPaint);
-
-                canvas.drawText(
-                        String.valueOf(enemies.size()),
-                        screenW - 24f,
-                        dotY + enemyHudPaint.getTextSize() / 3f,
-                        enemyHudPaint
-                );
-
-                // ── New item flash ──────────────────────────────────────────
-                if (newItemFlashTimer > 0 && newItemFlashName != null) {
-
-                    float a =
-                            newItemFlashTimer > 20
-                                    ? 1f
-                                    : newItemFlashTimer / 20f;
-
-                    newItemFlashPaint.setAlpha((int) (a * 255));
-
-                    canvas.drawText(
-                            "NEW!  " + newItemFlashName,
-                            screenW / 2f,
-                            screenH * 0.6f,
-                            newItemFlashPaint
-                    );
-                }
-
-                // ── Layer flash ─────────────────────────────────────────────
-                if (layerFlashTimer > 0 && layerFlashName != null) {
-
-                    float a =
-                            layerFlashTimer > 30
-                                    ? 1f
-                                    : layerFlashTimer / 30f;
-
-                    layerFlashPaint.setAlpha((int) (a * 255));
-
-                    canvas.drawText(
-                            layerFlashName,
-                            screenW / 2f,
-                            screenH * 0.5f,
-                            layerFlashPaint
-                    );
-                }
-
-                // ── Tutorial hints ──────────────────────────────────────────
-                if (depthMetres < 20f) {
-
-                    int alpha =
-                            depthMetres <= 15f
-                                    ? 180
-                                    : (int) (
-                                    180f *
-                                            (1f - (depthMetres - 15f) / 5f)
-                            );
-
-                    hintPaint.setAlpha(alpha);
-
-                    hintPaint.setTextAlign(Paint.Align.LEFT);
-                    canvas.drawText(
-                            "< LEFT",
-                            40f,
-                            screenH - 60f,
-                            hintPaint
-                    );
-
-                    hintPaint.setTextAlign(Paint.Align.RIGHT);
-                    canvas.drawText(
-                            "RIGHT >",
-                            screenW - 40f,
-                            screenH - 60f,
-                            hintPaint
-                    );
-                }
-
-                // ── Game over ───────────────────────────────────────────────
-                if (gameOver) {
-                    drawGameOver(canvas);
-                }
-            }
-
-        } finally {
-            holder.unlockCanvasAndPost(canvas);
-        }
-    }
+   private void draw() {
+      SurfaceHolder holder = getHolder();
+      Canvas canvas = holder.lockCanvas();
+      if (canvas == null) return;
+
+      try {
+          float effectiveCameraY;
+          float moleScreenY;
+
+          if (isIntro) {
+              moleScreenY = screenH * 0.65f;
+              effectiveCameraY = moleWorldY - moleScreenY;
+          } else {
+              effectiveCameraY = cameraY;
+              moleScreenY = screenH * 0.4f;
+          }
+
+          // ── Terrain background ────────────────────────────────────────────
+          int layerIdx = layerIndex(depthMetres);
+
+          if (tileBitmaps[layerIdx] == null) {
+              canvas.drawColor(terrainFallbackColor(depthMetres));
+          } else {
+              float layerMaxDepth = LAYERS[layerIdx][1];
+              float depthToNext = layerMaxDepth - depthMetres;
+              boolean nearBoundary = depthToNext < 50f && layerIdx < LAYERS.length - 1;
+
+              if (!nearBoundary) {
+                  tilePaint.setAlpha(255);
+                  drawTiledBackground(canvas, tileBitmaps[layerIdx]);
+              } else {
+                  float blend = (50f - depthToNext) / 50f;
+                  int primAlpha = Math.max(0, (int) (255 - blend * 55f));
+                  int secAlpha  = Math.min(255, (int) (blend * 55f));
+
+                  tilePaint.setAlpha(primAlpha);
+                  drawTiledBackground(canvas, tileBitmaps[layerIdx]);
+
+                  if (tileBitmaps[layerIdx + 1] != null && secAlpha > 0) {
+                      tilePaint.setAlpha(secAlpha);
+                      drawTiledBackground(canvas, tileBitmaps[layerIdx + 1]);
+                  }
+              }
+
+              // Depth darkening overlay
+              int[] L = LAYERS[layerIdx];
+              float layerT = L[1] < 999999
+                      ? Math.max(0f, Math.min(1f, (depthMetres - L[0]) / (float)(L[1] - L[0])))
+                      : 1f;
+              int darkAlpha = (int)(layerT * 40f);
+              if (darkAlpha > 0) canvas.drawColor(Color.argb(darkAlpha, 0, 0, 0));
+          }
+
+          // ── Intro mode ────────────────────────────────────────────────────
+          if (isIntro) {
+              drawIntroMole(canvas, moleScreenY);
+              if (!isTransitioning) {
+                  canvas.drawText(
+                      "Press The Screen To Start The game",
+                      screenW / 2f, screenH - 100f, introTextPaint);
+              }
+          } else {
+
+              // ── Gas cloud ────────────────────────────────────────────────
+              float gasScreenY = gasWorldY - effectiveCameraY;
+              if (gasScreenY > 0) canvas.drawRect(0, 0, screenW, gasScreenY, gasPaint);
+
+              // ── O2 canisters ─────────────────────────────────────────────
+              for (float[] c : canisters) {
+                  float sx = c[0], sy = c[1] - effectiveCameraY;
+                  if (sy < -CANISTER_H || sy > screenH + CANISTER_H) continue;
+                  if (bmpCanister != null)
+                      canvas.drawBitmap(bmpCanister, sx - CANISTER_W / 2f, sy - CANISTER_H / 2f, null);
+              }
+
+              // ── Coin pickups ──────────────────────────────────────────────
+              for (float[] c : coinItems) {
+                  float sx = c[0], sy = c[1] - effectiveCameraY;
+                  if (sy < -COIN_SIZE || sy > screenH + COIN_SIZE) continue;
+                  if (bmpCoin != null)
+                      canvas.drawBitmap(bmpCoin, sx - COIN_SIZE / 2f, sy - COIN_SIZE / 2f, null);
+              }
+
+              // ── Item nodes ────────────────────────────────────────────────
+              for (ItemNode node : itemNodes) {
+                  float sx = node.worldX, sy = node.worldY - effectiveCameraY;
+                  if (sy < -ITEM_SIZE || sy > screenH + ITEM_SIZE) continue;
+                  Bitmap bmp = itemBitmaps.get(node.item.id);
+                  if (bmp != null) {
+                      canvas.drawBitmap(bmp, sx - ITEM_SIZE / 2f, sy - ITEM_SIZE / 2f, null);
+                  } else {
+                      fallbackPaint.setColor(ItemCatalogue.getBorderColor(node.item.rarity));
+                      canvas.drawCircle(sx, sy, 16f, fallbackPaint);
+                  }
+              }
+
+              // ── Enemies ───────────────────────────────────────────────────
+              for (Enemy e : enemies) {
+                  float sx = e.worldX, sy = e.worldY - effectiveCameraY;
+                  int sw = ENEMY_SPRITE_W[e.type], sh = ENEMY_SPRITE_H[e.type];
+                  if (sy < -(sh * 2) || sy > screenH + sh * 2) continue;
+
+                  Bitmap bmp = e.velocityX >= 0
+                          ? enemyBitmapsRight[e.type]
+                          : enemyBitmapsLeft[e.type];
+                  if (bmp != null) {
+                      canvas.drawBitmap(bmp, sx - sw / 2f, sy - sh / 2f, null);
+                  } else {
+                      enemyBodyPaint.setColor(ENEMY_COLORS[e.type]);
+                      canvas.drawCircle(sx, sy, e.radius, enemyBodyPaint);
+                  }
+
+                  float dxE = moleWorldX - e.worldX, dyE = moleWorldY - e.worldY;
+                  if (dxE * dxE + dyE * dyE < 200f * 200f) {
+                      enemyLabelPaint.setColor(ENEMY_COLORS[e.type]);
+                      canvas.drawText(ENEMY_NAMES[e.type],
+                          sx, sy + sh / 2f + enemyLabelPaint.getTextSize(), enemyLabelPaint);
+                  }
+              }
+
+              // ── Mole ──────────────────────────────────────────────────────
+              drawMole(canvas, moleScreenY);
+
+              // ── Hit flash ─────────────────────────────────────────────────
+              if (hitFlashTimer > 0) canvas.drawRect(0, 0, screenW, screenH, hitFlashPaint);
+
+              // ── HUD ───────────────────────────────────────────────────────
+              drawHUD(canvas);
+
+              // ── Enemy counter ─────────────────────────────────────────────
+              float dotY = screenH - 30f;
+              canvas.drawCircle(screenW - 66f, dotY, 6f, enemyDotPaint);
+              canvas.drawText(String.valueOf(enemies.size()),
+                  screenW - 24f, dotY + enemyHudPaint.getTextSize() / 3f, enemyHudPaint);
+
+              // ── New item flash ────────────────────────────────────────────
+              if (newItemFlashTimer > 0 && newItemFlashName != null) {
+                  float a = newItemFlashTimer > 20 ? 1f : newItemFlashTimer / 20f;
+                  newItemFlashPaint.setAlpha((int)(a * 255));
+                  canvas.drawText("NEW!  " + newItemFlashName,
+                      screenW / 2f, screenH * 0.6f, newItemFlashPaint);
+              }
+
+              // ── Layer flash ───────────────────────────────────────────────
+              if (layerFlashTimer > 0 && layerFlashName != null) {
+                  float a = layerFlashTimer > 30 ? 1f : layerFlashTimer / 30f;
+                  layerFlashPaint.setAlpha((int)(a * 255));
+                  canvas.drawText(layerFlashName,
+                      screenW / 2f, screenH * 0.5f, layerFlashPaint);
+              }
+
+              // ── Tutorial hints ────────────────────────────────────────────
+              if (depthMetres < 20f) {
+                  int alpha = depthMetres <= 15f
+                          ? 180 : (int)(180f * (1f - (depthMetres - 15f) / 5f));
+                  hintPaint.setAlpha(alpha);
+                  hintPaint.setTextAlign(Paint.Align.LEFT);
+                  canvas.drawText("< LEFT", 40f, screenH - 60f, hintPaint);
+                  hintPaint.setTextAlign(Paint.Align.RIGHT);
+                  canvas.drawText("RIGHT >", screenW - 40f, screenH - 60f, hintPaint);
+              }
+
+              // ── Game over ─────────────────────────────────────────────────
+              if (gameOver) drawGameOver(canvas);
+          }
+
+      } finally {
+          holder.unlockCanvasAndPost(canvas);
+      }
+  }
 
     private void drawWorldBackground(Canvas canvas, float effectiveCameraY) {
         float surfaceScreenY = -effectiveCameraY; // World Y=0 is the surface (top of grass)
@@ -1327,7 +1166,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
             float moleSize = MOLE_RADIUS * 2.5f;
             float mx = screenW / 2f;
-            // Intro mole sits such that its feet are at screenY
+            // Feet are at screenY
             RectF dst = new RectF(mx - moleSize / 2, screenY - moleSize, mx + moleSize / 2, screenY);
             canvas.drawBitmap(moleIntroSheet, src, dst, null);
         }
@@ -1337,7 +1176,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         canvas.save();
         canvas.translate(moleWorldX, screenY);
         canvas.rotate(moleAngle);
-        canvas.rotate(180f); // Face upward
+        canvas.rotate(180f);
         if (moleSpriteSheet != null && moleFrameSrcW > 0 && moleFrameSrcH > 0) {
             int frameLeft = moleFrameIndex * moleFrameSrcW;
             if (frameLeft + moleFrameSrcW <= moleSpriteSheet.getWidth()) {
@@ -1347,7 +1186,6 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
                 canvas.drawBitmap(moleSpriteSheet, src, dst, null);
             }
         } else {
-            // Fallback
             canvas.drawCircle(0, 0, MOLE_RADIUS, molePaint);
             canvas.drawCircle(-10f, 12f, 5f, eyePaint);
             canvas.drawCircle(10f, 12f, 5f, eyePaint);
@@ -1356,11 +1194,9 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     }
 
     private void drawGameEntities(Canvas canvas, float effectiveCameraY) {
-        // Gas cloud
         float gasScreenY = gasWorldY - effectiveCameraY;
         if (gasScreenY > 0) canvas.drawRect(0, 0, screenW, gasScreenY, gasPaint);
 
-        // O2 canisters
         for (float[] c : canisters) {
             float sx = c[0], sy = c[1] - effectiveCameraY;
             if (sy < -CANISTER_H || sy > screenH + CANISTER_H) continue;
@@ -1369,7 +1205,6 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
             }
         }
 
-        // Coin pickups
         for (float[] c : coinItems) {
             float sx = c[0], sy = c[1] - effectiveCameraY;
             if (sy < -COIN_SIZE || sy > screenH + COIN_SIZE) continue;
@@ -1378,7 +1213,6 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
             }
         }
 
-        // Collectible item nodes
         for (ItemNode node : itemNodes) {
             float sx = node.worldX, sy = node.worldY - effectiveCameraY;
             if (sy < -ITEM_SIZE || sy > screenH + ITEM_SIZE) continue;
@@ -1393,7 +1227,6 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     }
 
     private void drawHUD(Canvas canvas) {
-        // Oxygen bar
         int barW = 20, barH = 200, barMargin = 24;
         int barX = screenW - barMargin - barW;
         int barTop = screenH / 2 - barH / 2;
@@ -1406,13 +1239,11 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
                 barX + barW, barBottom, oxyFillPaint);
         canvas.drawText("O2", barX + barW / 2f, barTop - 8f, oxyLabelPaint);
 
-        // HUD: depth + coins
-        canvas.drawText((int) depthMetres + "m",
+        canvas.drawText((int)depthMetres + "m",
                 screenW / 2f, hudPaint.getTextSize() + 16f, hudPaint);
         canvas.drawText("● " + runCoins,
                 24f, coinHudPaint.getTextSize() + 20f, coinHudPaint);
 
-        // "NEW!" flash
         if (newItemFlashTimer > 0 && newItemFlashName != null) {
             float a = newItemFlashTimer > 20 ? 1f : newItemFlashTimer / 20f;
             newItemFlashPaint.setAlpha((int) (a * 255));
@@ -1420,7 +1251,6 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
                     screenW / 2f, screenH * 0.6f, newItemFlashPaint);
         }
 
-        // Zone hints
         if (depthMetres < 20f) {
             int alpha = depthMetres <= 15f ? 180 : (int) (180f * (1f - (depthMetres - 15f) / 5f));
             hintPaint.setAlpha(alpha);
@@ -1480,6 +1310,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
         rowY += rowGap;
         canvas.drawText("COINS EARNED", labelX, rowY, statsLabelPaint);
+        statsValuePaint.setColor(Color.WHITE);
         canvas.drawText("+" + runCoins + " coins", valueX, rowY, statsValuePaint);
 
         rowY += rowGap;
@@ -1568,9 +1399,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
             if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
 
                 if (x >= retryLeft && x <= retryRight) {
-
-                    resetGame();
-
+                    post(this::resetGame);
                 } else if (x >= menuLeft && x <= menuRight) {
 
                     Context ctx = getContext();
