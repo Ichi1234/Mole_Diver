@@ -10,6 +10,8 @@ import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.media.MediaPlayer;
+import android.media.SoundPool;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.SparseArray;
@@ -161,6 +163,11 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     private Bitmap bmpCoin;
     private Bitmap bmpCanister;
 
+    // ─── Audio ───────────────────────────────────────────────────────────────
+    private MediaPlayer mediaPlayer;
+    private SoundPool   soundPool;
+    private int         pickupSoundId = -1;
+
     // ─── Paints ──────────────────────────────────────────────────────────────
     private final Paint tilePaint         = new Paint(Paint.FILTER_BITMAP_FLAG);
     private final Paint molePaint         = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -285,10 +292,62 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         goButtonTextPaint.setTextSize(sp(dm, 14f));
         goButtonTextPaint.setTextAlign(Paint.Align.CENTER);
         goButtonTextPaint.setFakeBoldText(true);
+
+        // ── Audio init ────────────────────────────────────────────────────────
+        try {
+            mediaPlayer = MediaPlayer.create(this.context, R.raw.background);
+            if (mediaPlayer != null) {
+                mediaPlayer.setLooping(true);
+                mediaPlayer.setVolume(0.4f, 0.4f);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "MediaPlayer init failed", e);
+        }
+
+        try {
+            soundPool     = new SoundPool.Builder().setMaxStreams(4).build();
+            pickupSoundId = soundPool.load(this.context, R.raw.item_pickup, 1);
+        } catch (Exception e) {
+            Log.e(TAG, "SoundPool init failed", e);
+        }
     }
 
     private static float sp(DisplayMetrics dm, float sp) {
         return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp, dm);
+    }
+
+    // ─── Audio helpers ────────────────────────────────────────────────────────
+
+    private void playSfx() {
+        try {
+            if (soundPool != null && pickupSoundId > 0
+                    && PlayerData.isSfxEnabled(context)) {
+                soundPool.play(pickupSoundId, 0.6f, 0.6f, 1, 0, 1.0f);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "SoundPool play failed", e);
+        }
+    }
+
+    /** Call from GameActivity.onDestroy() to free MediaPlayer and SoundPool. */
+    public void release() {
+        try {
+            if (mediaPlayer != null) {
+                mediaPlayer.stop();
+                mediaPlayer.release();
+                mediaPlayer = null;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "MediaPlayer release failed", e);
+        }
+        try {
+            if (soundPool != null) {
+                soundPool.release();
+                soundPool = null;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "SoundPool release failed", e);
+        }
     }
 
     // ─── Terrain helpers ──────────────────────────────────────────────────────
@@ -483,6 +542,18 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         pressingLeft  = false;
         pressingRight = false;
         gameOver      = false;
+
+        // Restore music volume and resume playback on retry
+        try {
+            if (mediaPlayer != null) {
+                mediaPlayer.setVolume(0.4f, 0.4f);
+                if (!mediaPlayer.isPlaying() && PlayerData.isMusicEnabled(context)) {
+                    mediaPlayer.start();
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "MediaPlayer retry restart failed", e);
+        }
     }
 
     // ─── Game loop ───────────────────────────────────────────────────────────
@@ -583,6 +654,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
             if (dx*dx + dy*dy < rangeSq) {
                 canIter.remove();
                 oxygen = Math.min(oxygen + o2RestoreAmount, maxOxygen);
+                playSfx();
             }
         }
 
@@ -595,6 +667,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
             if (dx*dx + dy*dy < rangeSq) {
                 coinIter.remove();
                 runCoins += multiplier ? 2 : 1;
+                playSfx();
             }
         }
 
@@ -612,6 +685,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
                         && PlayerData.hasCommonDoubler(context)) value *= 2;
                 if (multiplier) value *= 2;
                 runCoins += value;
+                playSfx();
                 if (isNew) {
                     newItemsThisRun++;
                     newItemFlashTimer = FLASH_DURATION;
@@ -672,6 +746,12 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         isNewRecord = depthMetres > prevBest;
         PlayerData.addCoins(context, runCoins);
         if (isNewRecord) PlayerData.setBestDepth(context, depthMetres);
+        // Lower music volume to signal game over
+        try {
+            if (mediaPlayer != null) mediaPlayer.setVolume(0.15f, 0.15f);
+        } catch (Exception e) {
+            Log.e(TAG, "MediaPlayer volume failed", e);
+        }
         gameOver = true;
     }
 
@@ -962,11 +1042,26 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         playing = true;
         thread  = new Thread(this);
         thread.start();
+        try {
+            if (mediaPlayer != null && !mediaPlayer.isPlaying()
+                    && PlayerData.isMusicEnabled(context)) {
+                mediaPlayer.start();
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "MediaPlayer resume failed", e);
+        }
     }
 
     public void pause() {
         playing = false;
         try { thread.join(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        try {
+            if (mediaPlayer != null && mediaPlayer.isPlaying()) {
+                mediaPlayer.pause();
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "MediaPlayer pause failed", e);
+        }
     }
 
     @Override public void surfaceCreated(SurfaceHolder holder) { }

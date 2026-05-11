@@ -28,4 +28,10 @@ public class GameActivity extends AppCompatActivity {
         super.onPause();
         gameView.pause();
     }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        gameView.release();
+    }
 }
