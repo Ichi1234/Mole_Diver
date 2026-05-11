@@ -100,7 +100,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
 
     // ─── Gas ─────────────────────────────────────────────────────────────────
-    private static final float GAS_SPEED = 5.2f;
+//    private static final float GAS_SPEED = 5.2f;
     private float gasWorldY;
 
     // ─── Oxygen ──────────────────────────────────────────────────────────────
@@ -823,7 +823,13 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         }
 
         // Gas
-        gasWorldY += GAS_SPEED;
+        // Starts slow, gets faster the deeper player goes, caps at moveSpeed * 0.85f
+        float minGasSpeed = 5f;
+        float maxGasSpeed = moveSpeed * 0.9f;
+        float gasAccel = Math.min(depthMetres / 400f, 1f); // reaches max by 400
+        float gasSpeed = minGasSpeed + (maxGasSpeed - minGasSpeed) * gasAccel;
+        gasWorldY += gasSpeed;
+
         if (gasWorldY >= moleWorldY) {
             Log.d(TAG, "Game over: gas at depth " + (int) depthMetres + "m");
             deathCause = "GAS CAUGHT YOU";
