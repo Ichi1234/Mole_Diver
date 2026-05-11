@@ -90,6 +90,8 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     private volatile boolean gameOver;
     private int newItemsFoundThisRun = 0;
     private boolean newBestDepthThisRun = false;
+    private boolean retryButtonHovered = false;
+    private boolean menuButtonHovered = false;
 
     // ─── Background gradient endpoints ───────────────────────────────────────
     private static final int BG_R_START = 101, BG_G_START = 67, BG_B_START = 33;
@@ -99,6 +101,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     private final SparseArray<Bitmap> itemBitmaps = new SparseArray<>();
     private Bitmap bmpCoin;
     private Bitmap bmpCanister;
+    private Bitmap bmpDead;
 
     // Mole animation sheet (8 frames laid out horizontally).
     private static final int MOLE_SHEET_FRAMES = 8;
@@ -174,12 +177,12 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         dimPaint.setColor(Color.argb(160, 0, 0, 0));
 
         gameOverPaint.setColor(Color.RED);
-        gameOverPaint.setTextSize(sp(dm, 34f));
+        gameOverPaint.setTextSize(sp(dm, 56f));
         gameOverPaint.setTextAlign(Paint.Align.CENTER);
         gameOverPaint.setFakeBoldText(true);
 
         gameOverSubPaint.setColor(Color.rgb(200, 200, 200));
-        gameOverSubPaint.setTextSize(sp(dm, 12f));
+        gameOverSubPaint.setTextSize(sp(dm, 17f));
         gameOverSubPaint.setTextAlign(Paint.Align.CENTER);
 
         cardPaint.setColor(Color.rgb(18, 20, 12));
@@ -188,17 +191,17 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         cardStrokePaint.setColor(Color.rgb(60, 80, 40));
 
         statsLabelPaint.setColor(Color.rgb(170, 190, 120));
-        statsLabelPaint.setTextSize(sp(dm, 12f));
+        statsLabelPaint.setTextSize(sp(dm, 15f));
         statsLabelPaint.setTextAlign(Paint.Align.LEFT);
         statsLabelPaint.setFakeBoldText(true);
 
         statsValuePaint.setColor(Color.WHITE);
-        statsValuePaint.setTextSize(sp(dm, 12f));
+        statsValuePaint.setTextSize(sp(dm, 15f));
         statsValuePaint.setTextAlign(Paint.Align.RIGHT);
         statsValuePaint.setFakeBoldText(true);
 
         buttonTextPaint.setColor(Color.WHITE);
-        buttonTextPaint.setTextSize(sp(dm, 12f));
+        buttonTextPaint.setTextSize(sp(dm, 14f));
         buttonTextPaint.setTextAlign(Paint.Align.CENTER);
         buttonTextPaint.setFakeBoldText(true);
 
@@ -226,6 +229,8 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
                             COIN_SIZE, COIN_SIZE);
         bmpCanister = scale(BitmapFactory.decodeResource(res, R.drawable.item_51_pickup_oxygen_tank),
                             CANISTER_W, CANISTER_H);
+        bmpDead     = scale(BitmapFactory.decodeResource(res, R.drawable.tunn_dead),
+                            124, 124);
 
         for (ItemCatalogue.Item item : ItemCatalogue.ALL_ITEMS) {
             Bitmap raw = BitmapFactory.decodeResource(res, item.spriteResId);
@@ -270,6 +275,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     private void recycleBitmaps() {
         if (bmpCoin     != null) { bmpCoin.recycle();     bmpCoin     = null; }
         if (bmpCanister != null) { bmpCanister.recycle(); bmpCanister = null; }
+        if (bmpDead     != null) { bmpDead.recycle();     bmpDead     = null; }
         for (int i = 0; i < itemBitmaps.size(); i++) {
             Bitmap b = itemBitmaps.valueAt(i);
             if (b != null && !b.isRecycled()) b.recycle();
@@ -609,35 +615,46 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
             // Game over overlay
             if (gameOver) {
-                canvas.drawRect(0, 0, screenW, screenH, dimPaint);
+                canvas.drawColor(Color.BLACK);
 
-                RectF card = getGameOverCardRect();
-                RectF stats = getGameOverStatsRect(card);
-                RectF retry = getRetryButtonRect(card);
-                RectF menu = getMenuButtonRect(card);
+                float screenCenterX = screenW / 2f;
+                float screenCenterY = screenH / 2f;
+                DisplayMetrics dm = getResources().getDisplayMetrics();
 
-                // Card body + subtle border
-                canvas.drawRoundRect(card, 26f, 26f, cardPaint);
-                canvas.drawRoundRect(card, 26f, 26f, cardStrokePaint);
+                // Death image - larger and positioned higher in vertical center
+                float deadSize = Math.min(screenW * 0.55f, 280f); // was 0.35f, 200f
+                float deadTop = screenCenterY - (screenH * 0.30f);
+                RectF deadRect = new RectF(screenCenterX - deadSize / 2f, deadTop, screenCenterX + deadSize / 2f, deadTop + deadSize);
+                if (bmpDead != null) {
+                    canvas.drawBitmap(bmpDead, null, deadRect, null);
+                }
 
-                float centerX = card.centerX();
-                float titleY   = card.top + sp(getResources().getDisplayMetrics(), 34f);
-                float subtitleY = card.top + sp(getResources().getDisplayMetrics(), 48f);
+                float titleY = deadRect.bottom + sp(dm, 60f);
+                float subtitleY = titleY + sp(dm, 28f);
 
-                canvas.drawText("GAME OVER", centerX, titleY, gameOverPaint);
+                canvas.drawText("GAME OVER", screenCenterX, titleY, gameOverPaint);
                 gameOverSubPaint.setColor(Color.rgb(160, 230, 70));
-                canvas.drawText("POISON GAS REACHED YOU", centerX, subtitleY, gameOverSubPaint);
+                gameOverSubPaint.setTextSize(sp(dm, 17f));
+                canvas.drawText("POISON GAS REACHED YOU", screenCenterX, subtitleY, gameOverSubPaint);
 
-                // Stats box
-                canvas.drawRoundRect(stats, 16f, 16f, cardPaint);
-                canvas.drawRoundRect(stats, 16f, 16f, cardStrokePaint);
+                // Stats box - wider and with more padding
+                float statsLeft = sp(dm, 16f);
+                float statsTop = subtitleY + sp(dm, 32f);
+                float statsWidth = screenW - sp(dm, 32f); // no cap
+                float statsHeight = sp(dm, 230f);  // was 210f
+                RectF stats = new RectF(statsLeft, statsTop, statsLeft + statsWidth, statsTop + statsHeight);
 
-                float labelX = stats.left + sp(getResources().getDisplayMetrics(), 14f);
-                float valueX  = stats.right - sp(getResources().getDisplayMetrics(), 14f);
-                float rowY    = stats.top + sp(getResources().getDisplayMetrics(), 18f);
-                float rowGap  = sp(getResources().getDisplayMetrics(), 18f);
+                canvas.drawRoundRect(stats, 20f, 20f, cardPaint);
+                canvas.drawRoundRect(stats, 20f, 20f, cardStrokePaint);
 
+                float labelX = statsLeft + sp(dm, 16f);
+                float valueX = statsLeft + statsWidth - sp(dm, 16f);
+                float rowY    = stats.top + sp(dm, 26f);
+                float rowGap = sp(dm, 40f);        // was 36f
                 int bestDepth = Math.round(PlayerData.getBestDepth(context));
+
+                statsLabelPaint.setTextSize(sp(dm, 13f));  // was 11f
+                statsValuePaint.setTextSize(sp(dm, 13f));  // was 11f
 
                 canvas.drawText("DEPTH", labelX, rowY, statsLabelPaint);
                 statsValuePaint.setColor(Color.WHITE);
@@ -647,7 +664,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
                 canvas.drawText("BEST DEPTH", labelX, rowY, statsLabelPaint);
                 if (newBestDepthThisRun) {
                     statsValuePaint.setColor(Color.rgb(255, 170, 40));
-                    canvas.drawText(bestDepth + " m  •  NEW RECORD!", valueX, rowY, statsValuePaint);
+                    canvas.drawText(bestDepth + " m", valueX, rowY, statsValuePaint);
                 } else {
                     statsValuePaint.setColor(Color.WHITE);
                     canvas.drawText(bestDepth + " m", valueX, rowY, statsValuePaint);
@@ -668,15 +685,39 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
                 statsValuePaint.setColor(Color.WHITE);
                 canvas.drawText("0", valueX, rowY, statsValuePaint);
 
-                // Buttons
-                canvas.drawRoundRect(retry, 14f, 14f, retryButtonPaint);
-                buttonStrokePaint.setColor(Color.rgb(90, 125, 185));
-                canvas.drawRoundRect(retry, 14f, 14f, buttonStrokePaint);
-                canvas.drawRoundRect(menu, 14f, 14f, menuButtonPaint);
-                buttonStrokePaint.setColor(Color.rgb(230, 180, 50));
-                canvas.drawRoundRect(menu, 14f, 14f, buttonStrokePaint);
+                // Buttons - positioned below stats with padding
+                float btnMarginSide = sp(dm, 20f);
+                float btnWidth = (screenW - 2f * btnMarginSide - 12f) / 2f;
+                float retryLeft = btnMarginSide;
+                float menuLeft = btnMarginSide + btnWidth + sp(dm, 12f);
+                float btnTop = stats.bottom + sp(dm, 28f);
+                float btnBottom = btnTop + sp(dm, 48f);
 
-                float btnTextY = retry.centerY() + sp(getResources().getDisplayMetrics(), 4f);
+                RectF retry = new RectF(retryLeft, btnTop, retryLeft + btnWidth, btnBottom);
+                RectF menu = new RectF(menuLeft, btnTop, menuLeft + btnWidth, btnBottom);
+
+                // Draw retry button with hover effect
+                if (retryButtonHovered) {
+                    retryButtonPaint.setColor(Color.rgb(46, 95, 156));
+                } else {
+                    retryButtonPaint.setColor(Color.rgb(36, 75, 126));
+                }
+                canvas.drawRoundRect(retry, 16f, 16f, retryButtonPaint);
+                buttonStrokePaint.setColor(Color.rgb(90, 125, 185));
+                canvas.drawRoundRect(retry, 16f, 16f, buttonStrokePaint);
+
+                // Draw menu button with hover effect
+                if (menuButtonHovered) {
+                    menuButtonPaint.setColor(Color.rgb(151, 114, 28));
+                } else {
+                    menuButtonPaint.setColor(Color.rgb(121, 84, 18));
+                }
+                canvas.drawRoundRect(menu, 16f, 16f, menuButtonPaint);
+                buttonStrokePaint.setColor(Color.rgb(230, 180, 50));
+                canvas.drawRoundRect(menu, 16f, 16f, buttonStrokePaint);
+
+                float btnTextY = retry.centerY() + sp(dm, 4f);
+                buttonTextPaint.setTextSize(sp(dm, 14f));
                 canvas.drawText("▶ RETRY", retry.centerX(), btnTextY, buttonTextPaint);
                 canvas.drawText("⌂ MENU", menu.centerX(), btnTextY, buttonTextPaint);
             }
@@ -700,18 +741,32 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (gameOver) {
+            float x = event.getX();
+            
+            // Calculate button positions for hit testing
+            DisplayMetrics dm = getResources().getDisplayMetrics();
+            float btnMarginSide = sp(dm, 20f);
+            float btnWidth = (screenW - 2f * btnMarginSide - 12f) / 2f;
+            float retryLeft = btnMarginSide;
+            float retryRight = retryLeft + btnWidth;
+            float menuLeft = retryLeft + btnWidth + sp(dm, 12f);
+            float menuRight = menuLeft + btnWidth;
+            
             if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
-                float x = event.getX();
-                float y = event.getY();
-                RectF card = getGameOverCardRect();
-                if (card.contains(x, y)) {
-                    if (getRetryButtonRect(card).contains(x, y)) {
-                        resetGame();
-                    } else if (getMenuButtonRect(card).contains(x, y)) {
-                        Context ctx = getContext();
-                        if (ctx instanceof GameActivity) ((GameActivity) ctx).finish();
-                    }
+                if (x >= retryLeft && x <= retryRight) {
+                    resetGame();
+                } else if (x >= menuLeft && x <= menuRight) {
+                    Context ctx = getContext();
+                    if (ctx instanceof GameActivity) ((GameActivity) ctx).finish();
                 }
+            } else if (event.getActionMasked() == MotionEvent.ACTION_MOVE) {
+                // Update hover states based on touch position
+                retryButtonHovered = (x >= retryLeft && x <= retryRight);
+                menuButtonHovered = (x >= menuLeft && x <= menuRight);
+            } else if (event.getActionMasked() == MotionEvent.ACTION_UP 
+                    || event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+                retryButtonHovered = false;
+                menuButtonHovered = false;
             }
             return true;
         }
@@ -750,33 +805,6 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         else pressingRight = false;
     }
 
-    private RectF getGameOverCardRect() {
-        float cardW = Math.min(screenW - 40f, 410f);
-        float cardH = Math.min(screenH * 0.62f, 430f);
-        float left = (screenW - cardW) / 2f;
-        float top = (screenH - cardH) / 2f - 10f;
-        return new RectF(left, top, left + cardW, top + cardH);
-    }
-
-    private RectF getGameOverStatsRect(RectF card) {
-        return new RectF(card.left + 14f, card.top + 95f, card.right - 14f, card.bottom - 80f);
-    }
-
-    private RectF getRetryButtonRect(RectF card) {
-        float gap = 10f;
-        float btnTop = card.bottom - 56f;
-        float btnBottom = card.bottom - 18f;
-        float half = (card.width() - 42f - gap) / 2f;
-        return new RectF(card.left + 21f, btnTop, card.left + 21f + half, btnBottom);
-    }
-
-    private RectF getMenuButtonRect(RectF card) {
-        float gap = 10f;
-        float btnTop = card.bottom - 56f;
-        float btnBottom = card.bottom - 18f;
-        float half = (card.width() - 42f - gap) / 2f;
-        return new RectF(card.left + 21f + half + gap, btnTop, card.left + 21f + half + gap + half, btnBottom);
-    }
 
     // ─── Lifecycle ───────────────────────────────────────────────────────────
 
