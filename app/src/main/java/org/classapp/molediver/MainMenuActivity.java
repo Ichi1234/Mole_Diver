@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.TextView;
+
 import androidx.appcompat.app.AppCompatActivity;
 
 public class MainMenuActivity extends AppCompatActivity {
@@ -22,6 +23,8 @@ public class MainMenuActivity extends AppCompatActivity {
         Button btnCollection   = findViewById(R.id.btnCollection);
         Button btnOptions      = findViewById(R.id.btnOptions);
         Button btnAchievements = findViewById(R.id.btnAchievements);
+        tvBestScore = findViewById(R.id.tvBestScore);
+        updateBestDepthUi();
 
         btnPlay.setOnClickListener(v ->
             startActivity(new Intent(this, GameActivity.class)));
@@ -42,9 +45,16 @@ public class MainMenuActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        updateBestDepthUi();
+
         float best = PlayerData.getBestDepth(this);
         tvBestScore.setText(best > 0
             ? "BEST DEPTH: " + (int) best + "m ★"
             : "BEST DEPTH: --- ★");
+    }
+
+    private void updateBestDepthUi() {
+        int bestDepthMetres = Math.round(PlayerData.getBestDepth(this));
+        tvBestScore.setText(getString(R.string.best_depth_format, bestDepthMetres));
     }
 }
