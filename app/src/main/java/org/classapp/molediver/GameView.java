@@ -23,6 +23,7 @@ import android.view.SurfaceView;
 
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 
 public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Callback {
 
@@ -120,6 +121,9 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     private Bitmap bmpMoleGodSave;
     private static final int GOD_SAVE_FRAMES = 4;
 
+    private boolean goldenSkinActive = false;
+    private Bitmap  bmpGoldenMole;
+
     private int godSaveFrameIndex = 0;
     private int godSaveFrameTimer = 0;
     private static final int GOD_SAVE_FRAME_DELAY = 8; // ~133ms per frame at 60fps
@@ -193,6 +197,14 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     private float lastEnemySpawnY;
     private int clawLevel;
     private int hitFlashTimer;
+
+    // ─── Achievement tracking ─────────────────────────────────────────────────
+    private int     runCanisters              = 0;
+    private int     enemiesHitThisRun         = 0;
+    private boolean hitEnemyThisRun           = false;
+    private boolean untouchableGrantedThisRun = false;
+    private boolean closeCallGrantedThisRun   = false;
+    private final List<String> newlyUnlockedAchievements = new ArrayList<>();
 
     // ─── Game-over stats ─────────────────────────────────────────────────────
     private volatile boolean gameOver;
@@ -614,6 +626,12 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
         // Load intro mole
         moleIntroSheet = BitmapFactory.decodeResource(res, R.drawable.mole_intro);
+
+        // Golden skin (Collector's Nightmare set reward)
+        goldenSkinActive = PlayerData.hasGoldenSkin(context);
+        if (goldenSkinActive) {
+            bmpGoldenMole = BitmapFactory.decodeResource(res, R.drawable.mole_top_down_god);
+        }
     }
 
     private static Bitmap scale(Bitmap src, int w, int h) {
@@ -671,6 +689,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
         if (bmpMoleGod != null)  { bmpMoleGod.recycle();  bmpMoleGod  = null; }
         if (bmpMoleGodSave != null) { bmpMoleGodSave.recycle(); bmpMoleGodSave = null; }
+        if (bmpGoldenMole != null) { bmpGoldenMole.recycle(); bmpGoldenMole = null; }
     }
 
     // ─── Enemy helpers ────────────────────────────────────────────────────────
@@ -753,6 +772,13 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         pressingLeft = false;
         pressingRight = false;
         gameOver = false;
+
+        runCanisters              = 0;
+        enemiesHitThisRun         = 0;
+        hitEnemyThisRun           = false;
+        untouchableGrantedThisRun = false;
+        closeCallGrantedThisRun   = false;
+        newlyUnlockedAchievements.clear();
 
         // Restore music volume and resume playback on retry
         try {
@@ -882,6 +908,12 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         cameraY = moleWorldY - screenH * 0.4f;
         depthMetres = Math.max((moleWorldY - GRASS_HEIGHT) / 10f, 0f);
 
+        // Achievement: untouchable (200m reached with no enemy hits, write once)
+        if (!untouchableGrantedThisRun && depthMetres >= 200f && !hitEnemyThisRun) {
+            untouchableGrantedThisRun = true;
+            PlayerData.setUntouchableTriggered(context);
+        }
+
         // ── Ending trigger ────────────────────────────────────────────────
         if (!isEnding && depthMetres >= ENDING_DEPTH) {
             isEnding = true;
@@ -924,6 +956,13 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
         // Oxygen
         oxygen = Math.max(oxygen - OXY_DRAIN, 0f);
+
+        // Achievement: close call (< 5% oxygen while still alive, write once)
+        if (!closeCallGrantedThisRun && oxygen > 0 && oxygen < maxOxygen * 0.05f) {
+            closeCallGrantedThisRun = true;
+            PlayerData.setCloseCallTriggered(context);
+        }
+
         if (oxygen <= 0f) {
             Log.d(TAG, "Game over: oxygen depleted at depth " + (int) depthMetres + "m");
             deathCause = "OXYGEN DEPLETED";
@@ -968,6 +1007,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
             if (dx * dx + dy * dy < rangeSq) {
                 canIter.remove();
                 oxygen = Math.min(oxygen + o2RestoreAmount, maxOxygen);
+                runCanisters++;
                 playSfx();
             }
         }
@@ -1044,6 +1084,8 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
                 int dmg = Math.max(0, e.damage - (clawLevel - 1) * 3);
                 oxygen = Math.max(0f, oxygen - dmg);
                 hitFlashTimer = 15;
+                hitEnemyThisRun = true;
+                enemiesHitThisRun++;
                 continue;
             }
 
@@ -1070,7 +1112,16 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         isNewRecord = depthMetres > prevBest;
         newBestDepthThisRun = isNewRecord;
         PlayerData.addCoins(context, runCoins);
+        PlayerData.addLifetimeCoins(context, runCoins);
+        PlayerData.addLifetimeEnemiesHit(context, enemiesHitThisRun);
+        PlayerData.updateMaxRunCoins(context, runCoins);
+        PlayerData.updateMaxRunCanisters(context, runCanisters);
         if (isNewRecord) PlayerData.setBestDepth(context, depthMetres);
+        List<Integer> newAchIds = AchievementManager.checkAndUnlockAll(context);
+        newlyUnlockedAchievements.clear();
+        for (int achId : newAchIds) {
+            newlyUnlockedAchievements.add(AchievementManager.ALL_ACHIEVEMENTS[achId - 1].name);
+        }
         try {
             if (mediaPlayer != null) mediaPlayer.setVolume(0.15f, 0.15f);
         } catch (Exception e) { Log.e(TAG, "MediaPlayer volume failed", e); }
@@ -1601,8 +1652,15 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         canvas.drawText("+" + runCoins + " coins", valueX, rowY, statsValuePaint);
 
         rowY += rowGap;
-        canvas.drawText("ENEMIES DODGED", labelX, rowY, statsLabelPaint);
-        canvas.drawText("0", valueX, rowY, statsValuePaint);
+        canvas.drawText("ENEMIES HIT", labelX, rowY, statsLabelPaint);
+        canvas.drawText(String.valueOf(enemiesHitThisRun), valueX, rowY, statsValuePaint);
+
+        if (goldenSkinActive) {
+            gameOverSubPaint.setColor(Color.rgb(255, 215, 0));
+            gameOverSubPaint.setTextSize(sp(dm, 10f));
+            canvas.drawText("✦ GOLDEN MOLE ✦", screenCenterX, stats.bottom + sp(dm, 14f), gameOverSubPaint);
+            gameOverSubPaint.setTextSize(sp(dm, 17f));
+        }
 
         float btnMarginSide = sp(dm, 20f);
         float btnWidth = (screenW - 2f * btnMarginSide - 12f) / 2f;
@@ -1627,6 +1685,20 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         float btnTextY = retry.centerY() + sp(dm, 4f);
         canvas.drawText("▶ RETRY", retry.centerX(), btnTextY, buttonTextPaint);
         canvas.drawText("⌂ MENU", menu.centerX(), btnTextY, buttonTextPaint);
+
+        if (!newlyUnlockedAchievements.isEmpty()) {
+            float achY = btnBottom + sp(dm, 26f);
+            gameOverSubPaint.setColor(Color.rgb(255, 215, 0));
+            gameOverSubPaint.setTextSize(sp(dm, 13f));
+            canvas.drawText("★ ACHIEVEMENT UNLOCKED ★", screenCenterX, achY, gameOverSubPaint);
+            gameOverSubPaint.setTextSize(sp(dm, 11f));
+            gameOverSubPaint.setColor(Color.rgb(200, 200, 200));
+            for (String name : newlyUnlockedAchievements) {
+                achY += sp(dm, 16f);
+                canvas.drawText(name, screenCenterX, achY, gameOverSubPaint);
+            }
+            gameOverSubPaint.setTextSize(sp(dm, 17f));
+        }
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────────

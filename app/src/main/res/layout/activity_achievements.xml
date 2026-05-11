@@ -35,7 +35,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="ACHIEVEMENT"
+                android:text="ACHIEVEMENTS"
                 android:textSize="22sp"
                 android:textColor="#4CAF50"
                 android:fontFamily="monospace"
@@ -46,9 +46,9 @@
                 android:id="@+id/tvCompletion"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="0% COMPLETION"
+                android:text="0 / 30 (0%)"
                 android:textSize="10sp"
-                android:textColor="#666666"
+                android:textColor="#F5C542"
                 android:fontFamily="monospace" />
 
         </LinearLayout>
@@ -65,8 +65,11 @@
         android:id="@+id/listAchievements"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:divider="#1E3A1E"
+        android:divider="#1A2A1A"
         android:dividerHeight="1dp"
-        android:padding="8dp" />
+        android:paddingTop="4dp"
+        android:paddingBottom="8dp"
+        android:clipToPadding="false"
+        android:background="#0D1A0D" />
 
 </LinearLayout>
