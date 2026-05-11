@@ -16,49 +16,41 @@ public class MainMenuActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main_menu);
 
-        Button btnPlay        = findViewById(R.id.btnPlay);
-        Button btnShop        = findViewById(R.id.btnShop);
-        Button btnCollection  = findViewById(R.id.btnCollection);
-        Button btnOptions     = findViewById(R.id.btnOptions);
+        tvBestScore = findViewById(R.id.tvBestScore);
+
+        Button btnPlay         = findViewById(R.id.btnPlay);
+        Button btnShop         = findViewById(R.id.btnShop);
+        Button btnCollection   = findViewById(R.id.btnCollection);
+        Button btnOptions      = findViewById(R.id.btnOptions);
         Button btnAchievements = findViewById(R.id.btnAchievements);
         tvBestScore = findViewById(R.id.tvBestScore);
         updateBestDepthUi();
 
-        // PLAY — launches the main game
-        btnPlay.setOnClickListener(v -> {
-            Intent intent = new Intent(this, GameActivity.class);
-            startActivity(intent);
-        });
+        btnPlay.setOnClickListener(v ->
+            startActivity(new Intent(this, GameActivity.class)));
 
-        // SHOP
-        btnShop.setOnClickListener(v -> {
-            Intent intent = new Intent(this, ShopActivity.class);
-            startActivity(intent);
-        });
+        btnShop.setOnClickListener(v ->
+            startActivity(new Intent(this, ShopActivity.class)));
 
-        // COLLECTION
-        btnCollection.setOnClickListener(v -> {
-            Intent intent = new Intent(this, CollectionActivity.class);
-            startActivity(intent);
-        });
+        btnCollection.setOnClickListener(v ->
+            startActivity(new Intent(this, CollectionActivity.class)));
 
-        // OPTIONS
-        btnOptions.setOnClickListener(v -> {
-            Intent intent = new Intent(this, OptionsActivity.class);
-            startActivity(intent);
-        });
+        btnOptions.setOnClickListener(v ->
+            startActivity(new Intent(this, OptionsActivity.class)));
 
-        // ACHIEVEMENTS
-        btnAchievements.setOnClickListener(v -> {
-            Intent intent = new Intent(this, AchievementsActivity.class);
-            startActivity(intent);
-        });
+        btnAchievements.setOnClickListener(v ->
+            startActivity(new Intent(this, AchievementsActivity.class)));
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         updateBestDepthUi();
+
+        float best = PlayerData.getBestDepth(this);
+        tvBestScore.setText(best > 0
+            ? "BEST DEPTH: " + (int) best + "m ★"
+            : "BEST DEPTH: --- ★");
     }
 
     private void updateBestDepthUi() {
