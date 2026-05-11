@@ -47,7 +47,12 @@ public class CollectionActivity extends AppCompatActivity {
         for (ItemCatalogue.Item item : ItemCatalogue.ALL_ITEMS) {
             if (PlayerData.isItemCollected(this, item.id)) collected++;
         }
-        tvItemCount.setText(collected + " / 50 COLLECTED");
+        if (collected == 50) {
+            tvItemCount.setText("ALL ITEMS COLLECTED — GOLDEN SKIN UNLOCKED!");
+            tvItemCount.setTextColor(Color.parseColor("#FFD700"));
+        } else {
+            tvItemCount.setText(collected + " / 50 COLLECTED");
+        }
 
         gridCollection.setAdapter(new ItemGridAdapter());
         buildSetCards();

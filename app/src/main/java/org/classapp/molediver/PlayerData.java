@@ -24,9 +24,18 @@ public class PlayerData {
     private static final String KEY_COLLECTED_PREFIX   = "collected_";
     private static final String KEY_SET_REWARD_PREFIX  = "set_reward_";
 
+    // Achievement keys
+    private static final String KEY_ACHIEVEMENT_PREFIX  = "achievement_";
+    private static final String KEY_LIFETIME_COINS      = "lifetime_coins";
+    private static final String KEY_LIFETIME_ENEMIES    = "lifetime_enemies_hit";
+    private static final String KEY_CLOSE_CALL          = "close_call_triggered";
+    private static final String KEY_UNTOUCHABLE         = "untouchable_triggered";
+    private static final String KEY_MAX_RUN_COINS       = "max_run_coins";
+    private static final String KEY_MAX_RUN_CANISTERS   = "max_run_canisters";
+
     private PlayerData() {}
 
-    private static SharedPreferences prefs(Context ctx) {
+    static SharedPreferences prefs(Context ctx) {
         return ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
     }
 
@@ -203,5 +212,90 @@ public class PlayerData {
     /** True when "Fool's Hoard" set reward is active (common items worth 2x). */
     public static boolean hasCommonDoubler(Context ctx) {
         return isSetRewardClaimed(ctx, "Fool's Hoard");
+    }
+
+    /** True when all 50 items have been collected (unlocks the golden mole skin). */
+    public static boolean hasGoldenSkin(Context ctx) {
+        SharedPreferences p = prefs(ctx);
+        for (int i = 1; i <= 50; i++) {
+            if (!p.getBoolean(KEY_COLLECTED_PREFIX + i, false)) return false;
+        }
+        return true;
+    }
+
+    // -------------------------------------------------------------------------
+    // Achievements
+    // -------------------------------------------------------------------------
+
+    public static boolean isAchievementUnlocked(Context ctx, int id) {
+        return prefs(ctx).getBoolean(KEY_ACHIEVEMENT_PREFIX + id, false);
+    }
+
+    public static void unlockAchievement(Context ctx, int id) {
+        prefs(ctx).edit().putBoolean(KEY_ACHIEVEMENT_PREFIX + id, true).apply();
+    }
+
+    // -------------------------------------------------------------------------
+    // Lifetime stats (never decrease)
+    // -------------------------------------------------------------------------
+
+    public static long getLifetimeCoins(Context ctx) {
+        return prefs(ctx).getLong(KEY_LIFETIME_COINS, 0L);
+    }
+
+    public static void addLifetimeCoins(Context ctx, int amount) {
+        SharedPreferences p = prefs(ctx);
+        p.edit().putLong(KEY_LIFETIME_COINS, p.getLong(KEY_LIFETIME_COINS, 0L) + amount).apply();
+    }
+
+    public static int getLifetimeEnemiesHit(Context ctx) {
+        return prefs(ctx).getInt(KEY_LIFETIME_ENEMIES, 0);
+    }
+
+    public static void addLifetimeEnemiesHit(Context ctx, int count) {
+        SharedPreferences p = prefs(ctx);
+        p.edit().putInt(KEY_LIFETIME_ENEMIES, p.getInt(KEY_LIFETIME_ENEMIES, 0) + count).apply();
+    }
+
+    /** Best single-run coin total ever recorded. Used for the "Big Haul" achievement. */
+    public static int getMaxRunCoins(Context ctx) {
+        return prefs(ctx).getInt(KEY_MAX_RUN_COINS, 0);
+    }
+
+    public static void updateMaxRunCoins(Context ctx, int runCoins) {
+        if (runCoins > getMaxRunCoins(ctx)) {
+            prefs(ctx).edit().putInt(KEY_MAX_RUN_COINS, runCoins).apply();
+        }
+    }
+
+    /** Best single-run O2 canister count ever recorded. Used for "Oxygen Hoarder". */
+    public static int getMaxRunCanisters(Context ctx) {
+        return prefs(ctx).getInt(KEY_MAX_RUN_CANISTERS, 0);
+    }
+
+    public static void updateMaxRunCanisters(Context ctx, int count) {
+        if (count > getMaxRunCanisters(ctx)) {
+            prefs(ctx).edit().putInt(KEY_MAX_RUN_CANISTERS, count).apply();
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // In-game triggers (written during a run, read by AchievementManager)
+    // -------------------------------------------------------------------------
+
+    public static boolean isCloseCallTriggered(Context ctx) {
+        return prefs(ctx).getBoolean(KEY_CLOSE_CALL, false);
+    }
+
+    public static void setCloseCallTriggered(Context ctx) {
+        prefs(ctx).edit().putBoolean(KEY_CLOSE_CALL, true).apply();
+    }
+
+    public static boolean isUntouchableTriggered(Context ctx) {
+        return prefs(ctx).getBoolean(KEY_UNTOUCHABLE, false);
+    }
+
+    public static void setUntouchableTriggered(Context ctx) {
+        prefs(ctx).edit().putBoolean(KEY_UNTOUCHABLE, true).apply();
     }
 }

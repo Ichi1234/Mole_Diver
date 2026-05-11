@@ -23,8 +23,6 @@ public class MainMenuActivity extends AppCompatActivity {
         Button btnCollection   = findViewById(R.id.btnCollection);
         Button btnOptions      = findViewById(R.id.btnOptions);
         Button btnAchievements = findViewById(R.id.btnAchievements);
-        tvBestScore = findViewById(R.id.tvBestScore);
-        updateBestDepthUi();
 
         btnPlay.setOnClickListener(v ->
             startActivity(new Intent(this, GameActivity.class)));
@@ -45,16 +43,12 @@ public class MainMenuActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        updateBestDepthUi();
+
+        AchievementManager.checkAndUnlockAll(this);
 
         float best = PlayerData.getBestDepth(this);
         tvBestScore.setText(best > 0
             ? "BEST DEPTH: " + (int) best + "m ★"
             : "BEST DEPTH: --- ★");
-    }
-
-    private void updateBestDepthUi() {
-        int bestDepthMetres = Math.round(PlayerData.getBestDepth(this));
-        tvBestScore.setText(getString(R.string.best_depth_format, bestDepthMetres));
     }
 }
