@@ -7,6 +7,8 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Rect;
+import android.graphics.RectF;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.SparseArray;
@@ -39,8 +41,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     private int screenW, screenH;
 
     // ─── Mole ────────────────────────────────────────────────────────────────
-    private static final float MOLE_RADIUS = 28f;
-    private static final float MAX_ANGLE   = 75f;
+    private static final float MOLE_RADIUS = 50f;
 
     private float moveSpeed, turnSpeed;
     private float moleWorldX, moleWorldY, moleAngle;
@@ -96,6 +97,15 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     private final SparseArray<Bitmap> itemBitmaps = new SparseArray<>();
     private Bitmap bmpCoin;
     private Bitmap bmpCanister;
+
+    // Mole animation sheet (8 frames laid out horizontally).
+    private static final int MOLE_SHEET_FRAMES = 8;
+    private Bitmap moleSpriteSheet;
+    private int moleFrameSrcW = 0;
+    private int moleFrameSrcH = 0;
+    private int moleFrameIndex = 0;
+    private int moleFrameTimer = 0;
+    private int moleFrameDelay = 6;   // ticks per frame (roughly 96ms at 60fps)
 
     // ─── Paints ──────────────────────────────────────────────────────────────
     private final Paint bgPaint           = new Paint();
@@ -186,6 +196,28 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
             // scale() recycles raw internally when it creates a new Bitmap
             if (raw != null) itemBitmaps.put(item.id, scale(raw, ITEM_SIZE, ITEM_SIZE));
         }
+
+        // Load the mole walking animation sheet and slice it dynamically.
+        moleSpriteSheet = BitmapFactory.decodeResource(res, R.drawable.mole_walk_animation);
+        if (moleSpriteSheet != null) {
+            if (moleSpriteSheet.getWidth() >= MOLE_SHEET_FRAMES) {
+                moleFrameSrcW = moleSpriteSheet.getWidth() / MOLE_SHEET_FRAMES;
+                moleFrameSrcH = moleSpriteSheet.getHeight();
+                if (moleFrameSrcW <= 0 || moleFrameSrcH <= 0) {
+                    Log.w(TAG, "Invalid mole sprite sheet size: "
+                            + moleSpriteSheet.getWidth() + "x" + moleSpriteSheet.getHeight());
+                    moleSpriteSheet.recycle();
+                    moleSpriteSheet = null;
+                } else if (moleSpriteSheet.getWidth() % MOLE_SHEET_FRAMES != 0) {
+                    Log.w(TAG, "Mole sprite sheet width is not evenly divisible by frame count: "
+                            + moleSpriteSheet.getWidth() + " / " + MOLE_SHEET_FRAMES);
+                }
+            } else {
+                Log.w(TAG, "Mole sprite sheet is too narrow: " + moleSpriteSheet.getWidth());
+                moleSpriteSheet.recycle();
+                moleSpriteSheet = null;
+            }
+        }
     }
 
     /**
@@ -207,6 +239,13 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
             if (b != null && !b.isRecycled()) b.recycle();
         }
         itemBitmaps.clear();
+
+        if (moleSpriteSheet != null) {
+            moleSpriteSheet.recycle();
+            moleSpriteSheet = null;
+        }
+        moleFrameSrcW = 0;
+        moleFrameSrcH = 0;
     }
 
     // ─── State reset ─────────────────────────────────────────────────────────
@@ -250,6 +289,10 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         pressingLeft  = false;
         pressingRight = false;
         gameOver      = false;
+
+        // Reset mole animation state
+        moleFrameIndex = 0;
+        moleFrameTimer = 0;
     }
 
     // ─── Game loop ───────────────────────────────────────────────────────────
@@ -273,13 +316,20 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     private void update() {
         if (screenW == 0) return;
 
-        // Steering
-        if (pressingLeft)  moleAngle = Math.max(moleAngle - turnSpeed, -MAX_ANGLE);
-        if (pressingRight) moleAngle = Math.min(moleAngle + turnSpeed,  MAX_ANGLE);
+        // Steering: allow full rotation and wrap heading to [-180, 180].
+        if (pressingLeft) {
+            moleAngle -= turnSpeed;
+            if (moleAngle < -180f) moleAngle += 360f;
+        }
+        if (pressingRight) {
+            moleAngle += turnSpeed;
+            if (moleAngle > 180f) moleAngle -= 360f;
+        }
 
         // Movement
         double rad = Math.toRadians(moleAngle);
-        moleWorldX += (float)(Math.sin(rad) * moveSpeed);
+        // Invert X to match the current sprite orientation after rotation adjustments.
+        moleWorldX -= (float)(Math.sin(rad) * moveSpeed);
         moleWorldY += (float)(Math.cos(rad) * moveSpeed);
         moleWorldX = Math.max(MOLE_RADIUS, Math.min(moleWorldX, screenW - MOLE_RADIUS));
 
@@ -370,6 +420,15 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         }
 
         if (newItemFlashTimer > 0) newItemFlashTimer--;
+
+        // --- advance mole animation ---
+        if (moleSpriteSheet != null) {
+            moleFrameTimer++;
+            if (moleFrameTimer >= moleFrameDelay) {
+                moleFrameTimer = 0;
+                moleFrameIndex = (moleFrameIndex + 1) % MOLE_SHEET_FRAMES;
+            }
+        }
     }
 
     private void saveRunResults() {
@@ -448,9 +507,25 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
             canvas.save();
             canvas.translate(moleWorldX, screenH * 0.4f);
             canvas.rotate(moleAngle);
-            canvas.drawCircle(0, 0, MOLE_RADIUS, molePaint);
-            canvas.drawCircle(-10f, 12f, 5f, eyePaint);
-            canvas.drawCircle( 10f, 12f, 5f, eyePaint);
+            canvas.rotate(180f); // Rotate 180 degrees so mole faces upward
+            if (moleSpriteSheet != null && moleFrameSrcW > 0 && moleFrameSrcH > 0) {
+                int frameLeft = moleFrameIndex * moleFrameSrcW;
+                if (frameLeft + moleFrameSrcW <= moleSpriteSheet.getWidth()) {
+                    Rect src = new Rect(frameLeft, 0, frameLeft + moleFrameSrcW, moleFrameSrcH);
+                    float dstSize = MOLE_RADIUS * 2f;
+                    RectF dst = new RectF(-dstSize / 2f, -dstSize / 2f, dstSize / 2f, dstSize / 2f);
+                    canvas.drawBitmap(moleSpriteSheet, src, dst, null);
+                } else {
+                    canvas.drawCircle(0, 0, MOLE_RADIUS, molePaint);
+                    canvas.drawCircle(-10f, 12f, 5f, eyePaint);
+                    canvas.drawCircle( 10f, 12f, 5f, eyePaint);
+                }
+            } else {
+                // Fallback to circle + eyes
+                canvas.drawCircle(0, 0, MOLE_RADIUS, molePaint);
+                canvas.drawCircle(-10f, 12f, 5f, eyePaint);
+                canvas.drawCircle( 10f, 12f, 5f, eyePaint);
+            }
             canvas.restore();
 
             // Oxygen bar
@@ -534,15 +609,29 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
                 break;
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_POINTER_UP:
-                registerRelease(event.getX(idx)); break;
+                registerRelease(event.getX(idx));
+                if (action == MotionEvent.ACTION_UP) performClick();
+                break;
             case MotionEvent.ACTION_CANCEL:
                 pressingLeft = pressingRight = false; break;
         }
         return true;
     }
 
-    private void registerPress  (float x) { if (x < screenW/2f) pressingLeft=true;  else pressingRight=true;  }
-    private void registerRelease(float x) { if (x < screenW/2f) pressingLeft=false; else pressingRight=false; }
+    @Override
+    public boolean performClick() {
+        return super.performClick();
+    }
+
+    private void registerPress(float x) {
+        if (x < screenW / 2f) pressingLeft = true;
+        else pressingRight = true;
+    }
+
+    private void registerRelease(float x) {
+        if (x < screenW / 2f) pressingLeft = false;
+        else pressingRight = false;
+    }
 
     // ─── Lifecycle ───────────────────────────────────────────────────────────
 
