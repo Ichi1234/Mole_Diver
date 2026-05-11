@@ -53,7 +53,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     private float cameraY, depthMetres;
 
     // ─── Gas ─────────────────────────────────────────────────────────────────
-    private static final float GAS_SPEED = 1.2f;
+    private static final float GAS_SPEED = 5.2f;
     private float gasWorldY;
 
     // ─── Oxygen ──────────────────────────────────────────────────────────────
@@ -557,11 +557,8 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
             float moleScreenY;
 
             if (isIntro) {
-                // Intro: mole starts at 70% height, ends at 40% height as it dives into soil.
-                float progress = Math.min((moleWorldY + GRASS_HEIGHT) / (2f * GRASS_HEIGHT), 1f);
-                float startY = screenH * 0.7f;
-                float endY = screenH * 0.4f;
-                moleScreenY = startY + (endY - startY) * progress;
+                // Mole stays FIXED on screen - only camera/background moves
+                moleScreenY = screenH * 0.65f;
                 effectiveCameraY = moleWorldY - moleScreenY;
             } else {
                 effectiveCameraY = cameraY;
