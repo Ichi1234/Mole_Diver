@@ -88,6 +88,8 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
     // ─── Game state ──────────────────────────────────────────────────────────
     private volatile boolean gameOver;
+    private int newItemsFoundThisRun = 0;
+    private boolean newBestDepthThisRun = false;
 
     // ─── Background gradient endpoints ───────────────────────────────────────
     private static final int BG_R_START = 101, BG_G_START = 67, BG_B_START = 33;
@@ -122,6 +124,14 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     private final Paint dimPaint          = new Paint();
     private final Paint gameOverPaint     = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint gameOverSubPaint  = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint cardPaint         = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint cardStrokePaint   = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint statsLabelPaint   = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint statsValuePaint   = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint buttonTextPaint   = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint retryButtonPaint  = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint menuButtonPaint   = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint buttonStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     // Fallback when a bitmap failed to load
     private final Paint fallbackPaint     = new Paint(Paint.ANTI_ALIAS_FLAG);
 
@@ -164,13 +174,39 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         dimPaint.setColor(Color.argb(160, 0, 0, 0));
 
         gameOverPaint.setColor(Color.RED);
-        gameOverPaint.setTextSize(sp(dm, 72f));
+        gameOverPaint.setTextSize(sp(dm, 34f));
         gameOverPaint.setTextAlign(Paint.Align.CENTER);
         gameOverPaint.setFakeBoldText(true);
 
         gameOverSubPaint.setColor(Color.rgb(200, 200, 200));
-        gameOverSubPaint.setTextSize(sp(dm, 22f));
+        gameOverSubPaint.setTextSize(sp(dm, 12f));
         gameOverSubPaint.setTextAlign(Paint.Align.CENTER);
+
+        cardPaint.setColor(Color.rgb(18, 20, 12));
+        cardStrokePaint.setStyle(Paint.Style.STROKE);
+        cardStrokePaint.setStrokeWidth(sp(dm, 1.5f));
+        cardStrokePaint.setColor(Color.rgb(60, 80, 40));
+
+        statsLabelPaint.setColor(Color.rgb(170, 190, 120));
+        statsLabelPaint.setTextSize(sp(dm, 12f));
+        statsLabelPaint.setTextAlign(Paint.Align.LEFT);
+        statsLabelPaint.setFakeBoldText(true);
+
+        statsValuePaint.setColor(Color.WHITE);
+        statsValuePaint.setTextSize(sp(dm, 12f));
+        statsValuePaint.setTextAlign(Paint.Align.RIGHT);
+        statsValuePaint.setFakeBoldText(true);
+
+        buttonTextPaint.setColor(Color.WHITE);
+        buttonTextPaint.setTextSize(sp(dm, 12f));
+        buttonTextPaint.setTextAlign(Paint.Align.CENTER);
+        buttonTextPaint.setFakeBoldText(true);
+
+        retryButtonPaint.setColor(Color.rgb(36, 75, 126));
+        menuButtonPaint.setColor(Color.rgb(121, 84, 18));
+        buttonStrokePaint.setStyle(Paint.Style.STROKE);
+        buttonStrokePaint.setStrokeWidth(sp(dm, 1f));
+        buttonStrokePaint.setColor(Color.rgb(255, 200, 70));
 
         fallbackPaint.setStyle(Paint.Style.FILL);
     }
@@ -290,9 +326,11 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         pressingRight = false;
         gameOver      = false;
 
-        // Reset mole animation state
+        // Reset run stats
         moleFrameIndex = 0;
         moleFrameTimer = 0;
+        newItemsFoundThisRun = 0;
+        newBestDepthThisRun = false;
     }
 
     // ─── Game loop ───────────────────────────────────────────────────────────
@@ -412,6 +450,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
                 if (multiplier) value *= 2;
                 runCoins += value;
                 if (isNew) {
+                    newItemsFoundThisRun++;
                     newItemFlashTimer = FLASH_DURATION;
                     newItemFlashName  = node.item.name;
                     checkAndClaimSets();
@@ -434,7 +473,8 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     private void saveRunResults() {
         PlayerData.addCoins(context, runCoins);
         float best = PlayerData.getBestDepth(context);
-        if (depthMetres > best) PlayerData.setBestDepth(context, depthMetres);
+        newBestDepthThisRun = depthMetres > best;
+        if (newBestDepthThisRun) PlayerData.setBestDepth(context, depthMetres);
         gameOver = true;
     }
 
@@ -570,10 +610,75 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
             // Game over overlay
             if (gameOver) {
                 canvas.drawRect(0, 0, screenW, screenH, dimPaint);
-                float cy = screenH / 2f;
-                canvas.drawText("GAME OVER",           screenW / 2f, cy - 40f, gameOverPaint);
-                canvas.drawText("COINS: +" + runCoins, screenW / 2f, cy + 50f, gameOverSubPaint);
-                canvas.drawText("tap to play again",   screenW / 2f, cy + 90f, gameOverSubPaint);
+
+                RectF card = getGameOverCardRect();
+                RectF stats = getGameOverStatsRect(card);
+                RectF retry = getRetryButtonRect(card);
+                RectF menu = getMenuButtonRect(card);
+
+                // Card body + subtle border
+                canvas.drawRoundRect(card, 26f, 26f, cardPaint);
+                canvas.drawRoundRect(card, 26f, 26f, cardStrokePaint);
+
+                float centerX = card.centerX();
+                float titleY   = card.top + sp(getResources().getDisplayMetrics(), 34f);
+                float subtitleY = card.top + sp(getResources().getDisplayMetrics(), 48f);
+
+                canvas.drawText("GAME OVER", centerX, titleY, gameOverPaint);
+                gameOverSubPaint.setColor(Color.rgb(160, 230, 70));
+                canvas.drawText("POISON GAS REACHED YOU", centerX, subtitleY, gameOverSubPaint);
+
+                // Stats box
+                canvas.drawRoundRect(stats, 16f, 16f, cardPaint);
+                canvas.drawRoundRect(stats, 16f, 16f, cardStrokePaint);
+
+                float labelX = stats.left + sp(getResources().getDisplayMetrics(), 14f);
+                float valueX  = stats.right - sp(getResources().getDisplayMetrics(), 14f);
+                float rowY    = stats.top + sp(getResources().getDisplayMetrics(), 18f);
+                float rowGap  = sp(getResources().getDisplayMetrics(), 18f);
+
+                int bestDepth = Math.round(PlayerData.getBestDepth(context));
+
+                canvas.drawText("DEPTH", labelX, rowY, statsLabelPaint);
+                statsValuePaint.setColor(Color.WHITE);
+                canvas.drawText(((int) depthMetres) + " m", valueX, rowY, statsValuePaint);
+
+                rowY += rowGap;
+                canvas.drawText("BEST DEPTH", labelX, rowY, statsLabelPaint);
+                if (newBestDepthThisRun) {
+                    statsValuePaint.setColor(Color.rgb(255, 170, 40));
+                    canvas.drawText(bestDepth + " m  •  NEW RECORD!", valueX, rowY, statsValuePaint);
+                } else {
+                    statsValuePaint.setColor(Color.WHITE);
+                    canvas.drawText(bestDepth + " m", valueX, rowY, statsValuePaint);
+                }
+
+                rowY += rowGap;
+                canvas.drawText("MATERIALS EARNED", labelX, rowY, statsLabelPaint);
+                statsValuePaint.setColor(Color.WHITE);
+                canvas.drawText(newItemsFoundThisRun + " items", valueX, rowY, statsValuePaint);
+
+                rowY += rowGap;
+                canvas.drawText("COINS EARNED", labelX, rowY, statsLabelPaint);
+                statsValuePaint.setColor(Color.WHITE);
+                canvas.drawText("+" + runCoins + " coins", valueX, rowY, statsValuePaint);
+
+                rowY += rowGap;
+                canvas.drawText("ENEMIES DODGED", labelX, rowY, statsLabelPaint);
+                statsValuePaint.setColor(Color.WHITE);
+                canvas.drawText("0", valueX, rowY, statsValuePaint);
+
+                // Buttons
+                canvas.drawRoundRect(retry, 14f, 14f, retryButtonPaint);
+                buttonStrokePaint.setColor(Color.rgb(90, 125, 185));
+                canvas.drawRoundRect(retry, 14f, 14f, buttonStrokePaint);
+                canvas.drawRoundRect(menu, 14f, 14f, menuButtonPaint);
+                buttonStrokePaint.setColor(Color.rgb(230, 180, 50));
+                canvas.drawRoundRect(menu, 14f, 14f, buttonStrokePaint);
+
+                float btnTextY = retry.centerY() + sp(getResources().getDisplayMetrics(), 4f);
+                canvas.drawText("▶ RETRY", retry.centerX(), btnTextY, buttonTextPaint);
+                canvas.drawText("⌂ MENU", menu.centerX(), btnTextY, buttonTextPaint);
             }
 
         } finally {
@@ -595,7 +700,19 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (gameOver) {
-            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) resetGame();
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                float x = event.getX();
+                float y = event.getY();
+                RectF card = getGameOverCardRect();
+                if (card.contains(x, y)) {
+                    if (getRetryButtonRect(card).contains(x, y)) {
+                        resetGame();
+                    } else if (getMenuButtonRect(card).contains(x, y)) {
+                        Context ctx = getContext();
+                        if (ctx instanceof GameActivity) ((GameActivity) ctx).finish();
+                    }
+                }
+            }
             return true;
         }
         int action = event.getActionMasked(), idx = event.getActionIndex();
@@ -631,6 +748,34 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     private void registerRelease(float x) {
         if (x < screenW / 2f) pressingLeft = false;
         else pressingRight = false;
+    }
+
+    private RectF getGameOverCardRect() {
+        float cardW = Math.min(screenW - 40f, 410f);
+        float cardH = Math.min(screenH * 0.62f, 430f);
+        float left = (screenW - cardW) / 2f;
+        float top = (screenH - cardH) / 2f - 10f;
+        return new RectF(left, top, left + cardW, top + cardH);
+    }
+
+    private RectF getGameOverStatsRect(RectF card) {
+        return new RectF(card.left + 14f, card.top + 95f, card.right - 14f, card.bottom - 80f);
+    }
+
+    private RectF getRetryButtonRect(RectF card) {
+        float gap = 10f;
+        float btnTop = card.bottom - 56f;
+        float btnBottom = card.bottom - 18f;
+        float half = (card.width() - 42f - gap) / 2f;
+        return new RectF(card.left + 21f, btnTop, card.left + 21f + half, btnBottom);
+    }
+
+    private RectF getMenuButtonRect(RectF card) {
+        float gap = 10f;
+        float btnTop = card.bottom - 56f;
+        float btnBottom = card.bottom - 18f;
+        float half = (card.width() - 42f - gap) / 2f;
+        return new RectF(card.left + 21f + half + gap, btnTop, card.left + 21f + half + gap + half, btnBottom);
     }
 
     // ─── Lifecycle ───────────────────────────────────────────────────────────

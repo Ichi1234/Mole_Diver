@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">MoleDiver</string>
+    <string name="best_depth_format">BEST DEPTH: %1$dm</string>
 </resources>

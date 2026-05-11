@@ -19,7 +19,7 @@
             android:id="@+id/splashIcon"
             android:layout_width="120dp"
             android:layout_height="120dp"
-            android:src="@mipmap/ic_launcher"
+            android:src="@drawable/mole_icon"
             android:scaleType="fitCenter"
             android:layout_marginBottom="24dp" />
 
