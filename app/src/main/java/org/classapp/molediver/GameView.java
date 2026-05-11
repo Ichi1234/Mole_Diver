@@ -53,7 +53,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     private float cameraY, depthMetres;
 
     // ─── Gas ─────────────────────────────────────────────────────────────────
-    private static final float GAS_SPEED = 1.2f;
+    private static final float GAS_SPEED = 5.2f;
     private float gasWorldY;
 
     // ─── Oxygen ──────────────────────────────────────────────────────────────
@@ -89,7 +89,6 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     // ─── Game state ──────────────────────────────────────────────────────────
     private volatile boolean isIntro = true;
     private volatile boolean isTransitioning = false;
-    private float transitionProgress = 0f; // 0.0 to 1.0
 
     private volatile boolean gameOver;
     private int newItemsFoundThisRun = 0;
@@ -102,7 +101,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     private static final int BG_R_END   = 20,  BG_G_END   = 12, BG_B_END   = 6;
     private static final int GRASS_COLOR = Color.rgb(34, 139, 34);
     private static final int SKY_COLOR   = Color.rgb(135, 206, 235);
-    private static final float GRASS_HEIGHT = 200f; // World height of the grass layer
+    private static final float GRASS_HEIGHT = 100f; // World height of the grass layer
 
     // ─── Cached bitmaps ──────────────────────────────────────────────────────
     private final SparseArray<Bitmap> itemBitmaps = new SparseArray<>();
@@ -336,7 +335,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         o2RestoreAmount = 10f  + (refillLevel - 1) * 5f;   // L1=10  … L5=30
 
         moleWorldX  = screenW / 2f;
-        moleWorldY  = GRASS_HEIGHT; // Mole starts sitting on the soil, boundary of grass
+        moleWorldY = 0f; // grass surface, mole feet touch it
         moleAngle   = 0f;
         cameraY     = moleWorldY - screenH * 0.4f;
         gasWorldY   = -300f;
@@ -360,7 +359,6 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         gameOver      = false;
         isIntro       = true;
         isTransitioning = false;
-        transitionProgress = 0f;
 
         // Reset run stats
         moleFrameIndex = 0;
@@ -393,7 +391,6 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         if (screenW == 0) return;
 
         if (isIntro) {
-            // Update intro animation
             if (moleIntroSheet != null) {
                 introFrameTimer++;
                 if (introFrameTimer >= 8) {
@@ -402,14 +399,14 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
                 }
             }
             if (isTransitioning) {
-                transitionProgress += 0.02f; // Smooth transition progress
-                if (transitionProgress >= 1f) {
+                moleWorldY += 4f;
+                if (moleWorldY >= GRASS_HEIGHT) {
+                    moleWorldY = GRASS_HEIGHT;
                     isIntro = false;
                     isTransitioning = false;
-                    transitionProgress = 0f;
-                    // Actual gameplay starts here
                 }
             }
+            // NOT transitioning = mole stands still, waiting for tap
             return;
         }
 
@@ -560,22 +557,19 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
             float moleScreenY;
 
             if (isIntro) {
-                // Intro: mole starts at 70% height, ends at 40% height.
-                // cameraY = moleWorldY - moleScreenY.
-                float startY = screenH * 0.7f;
-                float endY = screenH * 0.4f;
-                moleScreenY = startY + (endY - startY) * transitionProgress;
-                effectiveCameraY = GRASS_HEIGHT - moleScreenY;
+                // Mole stays FIXED on screen - only camera/background moves
+                moleScreenY = screenH * 0.65f;
+                effectiveCameraY = moleWorldY - moleScreenY;
             } else {
                 effectiveCameraY = cameraY;
                 moleScreenY = screenH * 0.4f;
             }
 
-            // Draw Background (Sky, Grass, Soil)
+            // Background (Soil, Sky, Grass)
             drawWorldBackground(canvas, effectiveCameraY);
 
             if (isIntro) {
-                // Draw Intro Mole
+                // Intro Mole
                 drawIntroMole(canvas, moleScreenY);
 
                 // Intro Text
@@ -630,7 +624,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
             float moleSize = MOLE_RADIUS * 2.5f;
             float mx = screenW / 2f;
-            // Intro mole sits such that its feet are at screenY
+            // Feet are at screenY
             RectF dst = new RectF(mx - moleSize / 2, screenY - moleSize, mx + moleSize / 2, screenY);
             canvas.drawBitmap(moleIntroSheet, src, dst, null);
         }
@@ -640,7 +634,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         canvas.save();
         canvas.translate(moleWorldX, screenY);
         canvas.rotate(moleAngle);
-        canvas.rotate(180f); // Face upward
+        canvas.rotate(180f);
         if (moleSpriteSheet != null && moleFrameSrcW > 0 && moleFrameSrcH > 0) {
             int frameLeft = moleFrameIndex * moleFrameSrcW;
             if (frameLeft + moleFrameSrcW <= moleSpriteSheet.getWidth()) {
@@ -650,7 +644,6 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
                 canvas.drawBitmap(moleSpriteSheet, src, dst, null);
             }
         } else {
-            // Fallback
             canvas.drawCircle(0, 0, MOLE_RADIUS, molePaint);
             canvas.drawCircle(-10f, 12f, 5f, eyePaint);
             canvas.drawCircle( 10f, 12f, 5f, eyePaint);
@@ -659,11 +652,9 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     }
 
     private void drawGameEntities(Canvas canvas, float effectiveCameraY) {
-        // Gas cloud
         float gasScreenY = gasWorldY - effectiveCameraY;
         if (gasScreenY > 0) canvas.drawRect(0, 0, screenW, gasScreenY, gasPaint);
 
-        // O2 canisters
         for (float[] c : canisters) {
             float sx = c[0], sy = c[1] - effectiveCameraY;
             if (sy < -CANISTER_H || sy > screenH + CANISTER_H) continue;
@@ -672,7 +663,6 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
             }
         }
 
-        // Coin pickups
         for (float[] c : coinItems) {
             float sx = c[0], sy = c[1] - effectiveCameraY;
             if (sy < -COIN_SIZE || sy > screenH + COIN_SIZE) continue;
@@ -681,7 +671,6 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
             }
         }
 
-        // Collectible item nodes
         for (ItemNode node : itemNodes) {
             float sx = node.worldX, sy = node.worldY - effectiveCameraY;
             if (sy < -ITEM_SIZE || sy > screenH + ITEM_SIZE) continue;
@@ -696,7 +685,6 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     }
 
     private void drawHUD(Canvas canvas) {
-        // Oxygen bar
         int barW = 20, barH = 200, barMargin = 24;
         int barX      = screenW - barMargin - barW;
         int barTop    = screenH / 2 - barH / 2;
@@ -709,13 +697,11 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
                 barX + barW, barBottom, oxyFillPaint);
         canvas.drawText("O2", barX + barW / 2f, barTop - 8f, oxyLabelPaint);
 
-        // HUD: depth + coins
         canvas.drawText((int)depthMetres + "m",
                 screenW / 2f, hudPaint.getTextSize() + 16f, hudPaint);
         canvas.drawText("● " + runCoins,
                 24f, coinHudPaint.getTextSize() + 20f, coinHudPaint);
 
-        // "NEW!" flash
         if (newItemFlashTimer > 0 && newItemFlashName != null) {
             float a = newItemFlashTimer > 20 ? 1f : newItemFlashTimer / 20f;
             newItemFlashPaint.setAlpha((int)(a * 255));
@@ -723,7 +709,6 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
                     screenW / 2f, screenH * 0.6f, newItemFlashPaint);
         }
 
-        // Zone hints
         if (depthMetres < 20f) {
             int alpha = depthMetres <= 15f ? 180 : (int)(180f * (1f - (depthMetres - 15f) / 5f));
             hintPaint.setAlpha(alpha);
@@ -783,6 +768,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
         rowY += rowGap;
         canvas.drawText("COINS EARNED", labelX, rowY, statsLabelPaint);
+        statsValuePaint.setColor(Color.WHITE);
         canvas.drawText("+" + runCoins + " coins", valueX, rowY, statsValuePaint);
 
         rowY += rowGap;
@@ -843,8 +829,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
             if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
                 if (x >= retryLeft && x <= retryRight) {
-                    resetGame();
-                    isIntro = false;
+                    post(this::resetGame);
                 } else if (x >= menuLeft && x <= menuRight) {
                     Context ctx = getContext();
                     if (ctx instanceof GameActivity) ((GameActivity) ctx).finish();
