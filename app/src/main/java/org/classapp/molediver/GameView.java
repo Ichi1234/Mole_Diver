@@ -7,6 +7,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.util.DisplayMetrics;
@@ -61,6 +62,13 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     };
     private static final String[] ENEMY_NAMES = { "Worm", "Beetle", "Rock Crawler" };
     private static final int MAX_ENEMIES = 8;
+
+    // Enemy sprite resources and on-screen sizes (indexed by type 0/1/2)
+    private static final int[] ENEMY_RES_IDS  = {
+        R.drawable.enemy_worm, R.drawable.enemy_beetle, R.drawable.enemy_rock_crawler,
+    };
+    private static final int[] ENEMY_SPRITE_W = { 48, 56, 64 };
+    private static final int[] ENEMY_SPRITE_H = { 48, 56, 64 };
 
     // ─── Context ─────────────────────────────────────────────────────────────
     private final Context context;
@@ -147,7 +155,9 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
     // ─── Cached bitmaps ──────────────────────────────────────────────────────
     private final SparseArray<Bitmap> itemBitmaps = new SparseArray<>();
-    private final Bitmap[] tileBitmaps = new Bitmap[TILE_RES_IDS.length];
+    private final Bitmap[] tileBitmaps        = new Bitmap[TILE_RES_IDS.length];
+    private final Bitmap[] enemyBitmapsRight  = new Bitmap[3]; // facing right (normal)
+    private final Bitmap[] enemyBitmapsLeft   = new Bitmap[3]; // facing left (h-flipped)
     private Bitmap bmpCoin;
     private Bitmap bmpCanister;
 
@@ -166,7 +176,6 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     private final Paint layerFlashPaint   = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint fallbackPaint     = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint enemyBodyPaint    = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint enemyRingPaint    = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint enemyLabelPaint   = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint enemyHudPaint     = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint enemyDotPaint     = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -225,11 +234,8 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
         fallbackPaint.setStyle(Paint.Style.FILL);
 
-        // Enemy paints
+        // Enemy paints (body used as fallback when bitmap is null)
         enemyBodyPaint.setStyle(Paint.Style.FILL);
-
-        enemyRingPaint.setStyle(Paint.Style.STROKE);
-        enemyRingPaint.setStrokeWidth(2f);
 
         enemyLabelPaint.setTextSize(sp(dm, 10f));
         enemyLabelPaint.setTextAlign(Paint.Align.CENTER);
@@ -347,6 +353,19 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         bmpCanister = scale(BitmapFactory.decodeResource(res, R.drawable.item_51_pickup_oxygen_tank),
                             CANISTER_W, CANISTER_H);
 
+        // Enemy sprites — load, scale, then pre-create h-flipped copies
+        Matrix flipMatrix = new Matrix();
+        flipMatrix.preScale(-1, 1);
+        for (int t = 0; t < 3; t++) {
+            Bitmap right = scale(BitmapFactory.decodeResource(res, ENEMY_RES_IDS[t]),
+                                 ENEMY_SPRITE_W[t], ENEMY_SPRITE_H[t]);
+            enemyBitmapsRight[t] = right;
+            if (right != null) {
+                enemyBitmapsLeft[t] = Bitmap.createBitmap(
+                    right, 0, 0, right.getWidth(), right.getHeight(), flipMatrix, false);
+            }
+        }
+
         // Collectible item sprites
         for (ItemCatalogue.Item item : ItemCatalogue.ALL_ITEMS) {
             Bitmap raw = BitmapFactory.decodeResource(res, item.spriteResId);
@@ -370,6 +389,16 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         }
         if (bmpCoin     != null) { bmpCoin.recycle();     bmpCoin     = null; }
         if (bmpCanister != null) { bmpCanister.recycle(); bmpCanister = null; }
+        for (int t = 0; t < 3; t++) {
+            if (enemyBitmapsRight[t] != null && !enemyBitmapsRight[t].isRecycled()) {
+                enemyBitmapsRight[t].recycle();
+            }
+            enemyBitmapsRight[t] = null;
+            if (enemyBitmapsLeft[t] != null && !enemyBitmapsLeft[t].isRecycled()) {
+                enemyBitmapsLeft[t].recycle();
+            }
+            enemyBitmapsLeft[t] = null;
+        }
         for (int i = 0; i < itemBitmaps.size(); i++) {
             Bitmap b = itemBitmaps.valueAt(i);
             if (b != null && !b.isRecycled()) b.recycle();
@@ -593,7 +622,6 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         }
 
         // ── Update enemies ────────────────────────────────────────────────────
-        float moleSq = MOLE_RADIUS;
         Iterator<Enemy> enemyIter = enemies.iterator();
         int eIdx = 0;
         while (enemyIter.hasNext()) {
@@ -740,30 +768,26 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
             // ── Enemies ───────────────────────────────────────────────────────
             for (Enemy e : enemies) {
                 float sx = e.worldX, sy = e.worldY - cameraY;
-                float r  = e.radius;
-                if (sy < -(r * 3) || sy > screenH + r * 3) continue;
+                int   sw = ENEMY_SPRITE_W[e.type], sh = ENEMY_SPRITE_H[e.type];
+                if (sy < -(sh * 2) || sy > screenH + sh * 2) continue;
 
-                int col = ENEMY_COLORS[e.type];
-
-                // Body
-                enemyBodyPaint.setColor(col);
-                canvas.drawCircle(sx, sy, r, enemyBodyPaint);
-
-                // Outline ring (darker)
-                enemyRingPaint.setColor(darkenColor(col));
-                canvas.drawCircle(sx, sy, r, enemyRingPaint);
-
-                // Eyes (offset toward movement direction)
-                float eyeDir = e.velocityX >= 0 ? 1f : -1f;
-                float eyeBaseX = sx + eyeDir * r * 0.3f;
-                canvas.drawCircle(eyeBaseX - r * 0.15f, sy - r * 0.2f, r * 0.15f, eyePaint);
-                canvas.drawCircle(eyeBaseX + r * 0.15f, sy - r * 0.2f, r * 0.15f, eyePaint);
+                // Pick facing bitmap; fall back to a filled circle if not loaded
+                Bitmap bmp = e.velocityX >= 0
+                    ? enemyBitmapsRight[e.type]
+                    : enemyBitmapsLeft[e.type];
+                if (bmp != null) {
+                    canvas.drawBitmap(bmp, sx - sw / 2f, sy - sh / 2f, null);
+                } else {
+                    enemyBodyPaint.setColor(ENEMY_COLORS[e.type]);
+                    canvas.drawCircle(sx, sy, e.radius, enemyBodyPaint);
+                }
 
                 // Name label — only when close to mole
                 float dxE = moleWorldX - e.worldX, dyE = moleWorldY - e.worldY;
                 if (dxE*dxE + dyE*dyE < 200f * 200f) {
-                    enemyLabelPaint.setColor(col);
-                    canvas.drawText(ENEMY_NAMES[e.type], sx, sy + r + enemyLabelPaint.getTextSize(), enemyLabelPaint);
+                    enemyLabelPaint.setColor(ENEMY_COLORS[e.type]);
+                    canvas.drawText(ENEMY_NAMES[e.type],
+                        sx, sy + sh / 2f + enemyLabelPaint.getTextSize(), enemyLabelPaint);
                 }
             }
 
