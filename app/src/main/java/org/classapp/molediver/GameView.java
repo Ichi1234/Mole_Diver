@@ -38,12 +38,12 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     // ─── Terrain layer table ──────────────────────────────────────────────────
     // Columns: minDepth, maxDepth, topR, topG, topB, botR, botG, botB
     private static final int[][] LAYERS = {
-            {0, 100, 101, 67, 33, 80, 50, 25},  // 0 Topsoil
-            {100, 300, 80, 50, 25, 140, 90, 60},  // 1 Clay
-            {300, 600, 140, 90, 60, 80, 80, 85},  // 2 Rock
-            {600, 1000, 80, 80, 85, 45, 45, 50},  // 3 Deep Rock
-            {1000, 1500, 45, 45, 50, 25, 20, 22},  // 4 Bedrock
-            {1500, 999999, 25, 20, 22, 15, 5, 5},  // 5 Core
+            {0, 500, 101, 67, 33, 80, 50, 25},  // 0 Topsoil
+            {500, 1000, 80, 50, 25, 140, 90, 60},  // 1 Clay
+            {1000, 2000, 140, 90, 60, 80, 80, 85},  // 2 Rock
+            {2000, 3000, 80, 80, 85, 45, 45, 50},  // 3 Deep Rock
+            {3000, 4000, 45, 45, 50, 25, 20, 22},  // 4 Bedrock
+            {4000, 999999, 25, 20, 22, 15, 5, 5},  // 5 Core
     };
     private static final String[] LAYER_NAMES = {
             "TOPSOIL", "CLAY LAYER", "ROCK LAYER", "DEEP ROCK", "BEDROCK", "THE CORE"
